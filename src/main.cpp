@@ -6,6 +6,7 @@
 #include <esp_netif.h>
 #include <esp_netif_types.h>
 #include <esp_wifi.h>
+#include <flatbuffers/flatbuffers.h>
 #include <http_app.h>
 #include <nvs_flash.h>
 #include <wifi_manager.h>
@@ -166,6 +167,7 @@ void cb_connection_AP_started(void *pvParameter, void *user_ctx) {
 }
 
 extern "C" void app_main(void) {
+  flatbuffers::FlatBufferBuilder builder;
   esp_err_t err = nvs_flash_init();
 
   if (err == ESP_ERR_NVS_NO_FREE_PAGES ||
