@@ -50,4 +50,5 @@ public:
 private:
   int https_with_hostname_params(const char *path,
                                  IpGeolocationIoParams *params, cJSON **output);
+  int find_tz_long();
 };
