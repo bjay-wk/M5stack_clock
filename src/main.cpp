@@ -1,4 +1,5 @@
 #include "http_manager.h"
+#include "ipgeolocation_io.hpp"
 #include "sntp.h"
 #include <M5Unified.h>
 #include <esp_log.h>
@@ -81,9 +82,14 @@ void action_task(void *pvParameter) {
         M5.Lcd.setCursor(0, 0);
         M5.Lcd.printf("Wifi Connected\nIP:\n%s\n", user_ctx->str_ip);
         ESP_LOGI(TAG, "Wifi Connected");
+        settimezone("CET-1CEST,M3.5.0,M10.5.0/3");
         get_time(format, time_buf, sizeof(time_buf));
         M5.Lcd.printf("%s\n", time_buf);
         ESP_LOGI(TAG, "sntp time: %s", time_buf);
+        auto test = IpGeolocationIo();
+        test.update_geoloc();
+        ESP_LOGI(TAG, "city: %s", test.city);
+
         start_or_restart_timer(do_nothing_timer, 3000000);
         break;
       }
