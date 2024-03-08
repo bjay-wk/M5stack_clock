@@ -36,3 +36,5 @@
 .vscode
 sdkconfig.*
 managed_components
+
+include/weather_api_generated.h

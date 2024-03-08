@@ -1,6 +1,7 @@
 #include "http_manager.h"
 #include "ipgeolocation_io.hpp"
 #include "sntp.h"
+#include "weather_api_generated.h"
 #include <M5Unified.h>
 #include <esp_log.h>
 #include <esp_netif.h>
