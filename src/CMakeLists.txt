@@ -3,7 +3,7 @@
 
 FILE(GLOB_RECURSE app_sources ${CMAKE_SOURCE_DIR}/src/*.*)
 idf_component_register(SRCS ${app_sources}
-    INCLUDE_DIRS ${CMAKE_SOURCE_DIR}/lib/flatbuffers/include
+    INCLUDE_DIRS ${CMAKE_SOURCE_DIR}/extra_lib/flatbuffers/include
     REQUIRES esp32-wifi-manager
 )
 
