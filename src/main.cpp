@@ -1,5 +1,6 @@
 #include "http_manager.h"
 #include "ipgeolocation_io.hpp"
+#include "open_meteo.hpp"
 #include "sntp.h"
 #include "weather_api_generated.h"
 #include <M5Unified.h>
@@ -94,6 +95,24 @@ void action_task(void *pvParameter) {
         ESP_LOGI(TAG, "tz_long: %s", test.tz_long);
         settimezone(test.tz_long);
         start_or_restart_timer(do_nothing_timer, 3000000);
+        time_t now;
+        time(&now);
+        OM_SDK::TimeParam daily[] = {OM_SDK::temperature_2m_max, OM_SDK::rain,
+                                     OM_SDK::max_params};
+        openmeteo_sdk::Model models[] = {
+            openmeteo_sdk::Model::Model_arpae_cosmo_2i,
+            openmeteo_sdk::Model::Model_cams_europe,
+            openmeteo_sdk::Model::Model_undefined};
+        OM_SDK::OpenMeteoParams p{
+            .latitude = std::stof(test.latitude),
+            .longitude = std::stof(test.longitude),
+            .daily = daily,
+            .temperature_unit = OM_SDK::celsius,
+            .forecast_days = 4,
+            .start_date = now,
+            .models = models,
+        };
+        OM_SDK::get_weather(&p);
         break;
       }
       case WifiDisconnected:
