@@ -1,11 +1,17 @@
 #include "open_meteo.hpp"
 #include <algorithm>
+#include <esp_crt_bundle.h>
+#include <esp_http_client.h>
 #include <esp_log.h>
 #include <sstream>
 
 #define TAG "OM_SDK"
 #define PAST_DAY_MAX 92
 #define FORCAST_DAY_MAX 7
+#define WEB_URL "https://api.open-meteo.com"
+#define FORECAST "/v1/forecast"
+#define MAX_HTTP_OUTPUT_BUFFER_CALLOC 26 * 1024
+#define ARRAY_LENGTH(array) (sizeof((array)) / sizeof((array)[0]))
 
 namespace OM_SDK {
 
@@ -308,6 +314,7 @@ void filterTimeParams(TimeParam *params, const TimeParam *filter,
     while (i < filter_size && filter[i] != *value) {
       ++i;
     }
+    ESP_LOGI(TAG, "toto %d, %d", i, filter_size);
     if (i == filter_size) {
       *value = undefined;
     }
@@ -328,11 +335,11 @@ void validate_time_interval(time_t *t1, time_t *t2) {
 }
 
 void validateParams(OpenMeteoParams *params) {
-  filterTimeParams(params->hourly, hourlyFilter, sizeof(hourlyFilter));
-  filterTimeParams(params->daily, dailyFilter, sizeof(dailyFilter));
+  filterTimeParams(params->hourly, hourlyFilter, ARRAY_LENGTH(hourlyFilter));
+  filterTimeParams(params->daily, dailyFilter, ARRAY_LENGTH(dailyFilter));
   filterTimeParams(params->minutely_15, minutely_15Filter,
-                   sizeof(minutely_15Filter));
-  filterTimeParams(params->current, currentFilter, sizeof(currentFilter));
+                   ARRAY_LENGTH(minutely_15Filter));
+  filterTimeParams(params->current, currentFilter, ARRAY_LENGTH(currentFilter));
   if (params->past_days >= PAST_DAY_MAX) {
     params->past_days = PAST_DAY_MAX;
   }
@@ -344,10 +351,14 @@ void validateParams(OpenMeteoParams *params) {
   validate_time_interval(&params->start_minutely_15, &params->end_minutely_15);
 }
 
-std::string add(time_t value, const char *name) {
+std::string add(time_t value, const char *name, const char *format) {
+  struct tm timeinfo;
+  localtime_r(&value, &timeinfo);
+  char strftime_buf[17] = {0};
+  strftime(strftime_buf, ARRAY_LENGTH(strftime_buf), format, &timeinfo);
   std::stringstream ss;
   if (value != 0)
-    ss << "&" << name << "=" << value;
+    ss << "&" << name << "=" << strftime_buf;
   return ss.str();
 }
 
@@ -390,13 +401,14 @@ std::string timeParams_to_args(TimeParam *params, const char *str) {
   return ss.str();
 }
 
-std::string paramsToString(OpenMeteoParams *p) {
+std::string paramsToString(const OpenMeteoParams *p) {
   std::stringstream ss;
   ss << "?latitude=" << p->latitude << "&longitude=" << p->longitude
      << "&format=flatbuffers";
 #ifdef OPEN_METEO_API_KEY
   ss << ",apikey=" OPEN_METEO_API_KEY;
 #endif
+  bool force_timezone_to_auto = false;
   if (!p->elevation_default)
     ss << "&elevation=" << p->elevation;
   ss << timeParams_to_args(p->hourly, "&hourly=")
@@ -404,9 +416,7 @@ std::string paramsToString(OpenMeteoParams *p) {
      << timeParams_to_args(p->current, "&current=");
   if (p->daily) {
     ss << timeParams_to_args(p->daily, "&daily=");
-    if (!p->timezone) {
-      p->timezone = strdup("auto");
-    }
+    force_timezone_to_auto = true;
   }
   if (p->temperature_unit != undefined_tmp_unit)
     ss << "&temperature_unit="
@@ -418,18 +428,23 @@ std::string paramsToString(OpenMeteoParams *p) {
        << EnumNamesPrecipitationUnit()[p->precipitation_unit];
   if (p->timeformat != undefined_timeformat)
     ss << "&timeformat=" << EnumNamesTimeFormat()[p->timeformat];
-  if (p->timezone)
+  if (force_timezone_to_auto) {
+    ss << "&timezone=auto";
+  } else if (p->timezone) {
     ss << "&timezone=" << p->timezone;
+  }
 
   ss << add(p->past_days, "past_days")
      << add(p->forecast_hours, "forecast_hours")
      << add(p->forecast_minutely_15, "forecast_minutely_15")
      << add(p->past_hours, "past_hours")
      << add(p->past_minutely_15, "pas_minutely_15")
-     << add(p->start_date, "start_date") << add(p->end_date, "end_date")
-     << add(p->start_hour, "start_hour") << add(p->end_hour, "end_hour")
-     << add(p->start_minutely_15, "start_minutely_15")
-     << add(p->end_minutely_15, "end_minutely_15");
+     << add(p->start_date, "start_date", "%F")
+     << add(p->end_date, "end_date", "%F")
+     << add(p->start_hour, "start_hour", "%FT%T")
+     << add(p->end_hour, "end_hour", "%FT%T")
+     << add(p->start_minutely_15, "start_minutely_15", "%FT%T")
+     << add(p->end_minutely_15, "end_minutely_15", "%FT%T");
   if (p->models) {
     openmeteo_sdk::Model *models = p->models;
     ss << "&model=";
@@ -447,12 +462,60 @@ std::string paramsToString(OpenMeteoParams *p) {
   return ss.str();
 }
 
-int get_weather(OpenMeteoParams *params) {
+int https_with_hostname_params(const char *path, const OpenMeteoParams *params,
+                               openmeteo_sdk::WeatherApiResponse **output);
+
+int get_weather(OpenMeteoParams *params,
+                openmeteo_sdk::WeatherApiResponse **output) {
   if (!params)
     return -1;
   validateParams(params);
-  std::string args = paramsToString(params);
-  ESP_LOGI(TAG, "args%s", args.c_str());
-  return 200;
+  return https_with_hostname_params(FORECAST, params, output);
+}
+
+int https_with_hostname_params(const char *path, const OpenMeteoParams *params,
+                               openmeteo_sdk::WeatherApiResponse **output) {
+  esp_http_client_config_t config = {};
+  char *output_buffer = NULL;
+  const std::string url = std::string(WEB_URL) + path + paramsToString(params);
+  ESP_LOGI(TAG, "%s", url.c_str());
+  config.url = url.c_str();
+  config.crt_bundle_attach = esp_crt_bundle_attach;
+  config.transport_type = HTTP_TRANSPORT_OVER_SSL;
+  esp_http_client_handle_t client = esp_http_client_init(&config);
+  esp_http_client_set_method(client, HTTP_METHOD_GET);
+  int data_len = 0;
+  char *data = NULL;
+  esp_err_t err = esp_http_client_open(client, data_len);
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "Failed to open HTTP connection: %s", esp_err_to_name(err));
+  } else if (data != NULL &&
+             esp_http_client_write(client, data, data_len) < 0) {
+    ESP_LOGE(TAG, "Write failed");
+  } else if (esp_http_client_fetch_headers(client) < 0) {
+    ESP_LOGE(TAG, "HTTP client fetch headers failed");
+  } else {
+    output_buffer = (char *)calloc(MAX_HTTP_OUTPUT_BUFFER_CALLOC, 1);
+    int total_read = 0;
+    int read = 0;
+    do {
+      read = esp_http_client_read_response(client, output_buffer + total_read,
+                                           MAX_HTTP_OUTPUT_BUFFER_CALLOC -
+                                               total_read);
+      total_read += read;
+    } while (read > 0);
+    if (output) {
+      ESP_LOGI(TAG, "%s", output_buffer);
+      *output = (openmeteo_sdk::WeatherApiResponse *)
+          openmeteo_sdk::GetSizePrefixedWeatherApiResponse(output_buffer);
+    }
+    // TODO check that
+    free(output_buffer);
+  }
+
+  esp_http_client_close(client);
+  const int status_code = esp_http_client_get_status_code(client);
+  esp_http_client_cleanup(client);
+  return status_code;
 }
 } // namespace OM_SDK
