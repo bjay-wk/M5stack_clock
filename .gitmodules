@@ -1,0 +1,9 @@
+[submodule "components/esp32-wifi-manager"]
+	path = components/esp32-wifi-manager
+	url = https://github.com/bjay-wk/esp32-wifi-manager.git
+[submodule "lib/esp32-open-meteo/extra_lib/flatbuffers"]
+	path = lib/esp32-open-meteo/extra_lib/flatbuffers
+	url = https://github.com/google/flatbuffers.git
+[submodule "lib/esp32-open-meteo/extra_lib/open-meteo-sdk"]
+	path = lib/esp32-open-meteo/extra_lib/open-meteo-sdk
+	url = https://github.com/open-meteo/sdk.git
