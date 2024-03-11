@@ -37,4 +37,4 @@
 sdkconfig.*
 managed_components
 
-include/weather_api_generated.h
+lib/esp32-open-meteo/include/weather_api_generated.h
