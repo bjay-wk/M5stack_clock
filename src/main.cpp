@@ -223,6 +223,7 @@ extern "C" void app_main(void) {
   xTaskCreate(&action_task, "action_task", 8192, &userContext, 5, nullptr);
   // fingerMng.fingerprint->fpm_setAddMode(0x34);
   // ESP_LOGI(TAG, "IDLE yes");
+
   while (1) {
     M5.update();
     if (M5.BtnA.wasClicked()) {

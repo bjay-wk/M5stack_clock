@@ -10,9 +10,6 @@
 #endif
 #define CLIENT_API_KEY CONFIG_IPGEOLOCATION_IO_API_KEY
 
-#define GITHUB_POSIX_TZ_DB                                                     \
-  "https://raw.githubusercontent.com/nayarsystems/posix_tz_db/master/"         \
-  "zones.json"
 #define WEB_URL "https://api.ipgeolocation.io"
 #define GEOLOC "/ipgeo"
 #define TAG "ipgeolocation"
@@ -54,19 +51,13 @@ char *IpGeolocationIoIpGeoParams::get_str_parameter() {
 
 int IpGeolocationIo::get_location(IpGeolocationIoParams *params,
                                   cJSON **output) {
+  ESP_LOGI(TAG, "CAll update  IP geoloc");
   return _https_with_hostname_params(GEOLOC, params, output);
 }
 
 int IpGeolocationIo::_https_with_hostname_params(const char *path,
                                                  IpGeolocationIoParams *params,
                                                  cJSON **output) {
-  char *tmp = "{\"country_name\":\"France\",\"city\":\"Paris\",\"latitude\":"
-              "\"48.83792\",\"longitude\":\"2.37062\",\"time_zone\":{\"name\":"
-              "\"Europe/Paris\"}}";
-  if (output) {
-    *output = cJSON_Parse(tmp);
-  }
-  return 200;
   esp_http_client_config_t config = {};
   char *output_buffer = NULL;
   char *params_str = params->get_str_parameter();
@@ -100,6 +91,7 @@ int IpGeolocationIo::_https_with_hostname_params(const char *path,
       total_read += read;
     } while (read > 0);
     if (output) {
+      ESP_LOGI(TAG, " tototoo %d", total_read);
       *output = cJSON_Parse(output_buffer);
     }
     free(output_buffer);
