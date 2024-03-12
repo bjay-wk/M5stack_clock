@@ -1,5 +1,5 @@
+#include "geolocation.hpp"
 #include "http_manager.h"
-#include "ipgeolocation_io.hpp"
 #include "open_meteo.hpp"
 #include "sntp.h"
 #include "weather_api_generated.h"
@@ -88,20 +88,20 @@ void action_task(void *pvParameter) {
         get_time(format, time_buf, sizeof(time_buf));
         M5.Lcd.printf("%s\n", time_buf);
         ESP_LOGI(TAG, "sntp time: %s", time_buf);
-        auto test = IpGeolocationIo();
+        auto test = Geolocation();
         test.update_geoloc();
-        ESP_LOGI(TAG, "city: %s", test.city);
-        ESP_LOGI(TAG, "tz: %s", test.tz);
-        ESP_LOGI(TAG, "tz_long: %s", test.tz_long);
-        settimezone(test.tz_long);
+        ESP_LOGI(TAG, "city: %s", test.city());
+        ESP_LOGI(TAG, "tz: %s", test.tz());
+        ESP_LOGI(TAG, "tz posix: %s", test.posix_tz());
+        settimezone(test.posix_tz());
         start_or_restart_timer(do_nothing_timer, 3000000);
         time_t now;
         time(&now);
         OM_SDK::TimeParam daily[] = {OM_SDK::temperature_2m,
                                      OM_SDK::max_params};
         OM_SDK::OpenMeteoParams p{
-            .latitude = std::stof(test.latitude),
-            .longitude = std::stof(test.longitude),
+            .latitude = test.latitude(),
+            .longitude = test.longitude(),
             .current = daily,
             .forecast_days = 4,
         };
