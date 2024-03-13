@@ -2,6 +2,7 @@
 #include "geolocation.hpp"
 #include "http_manager.h"
 #include "open_meteo.hpp"
+#include "pm25.hpp"
 #include "sntp.h"
 #include "weather_api_generated.h"
 #include <M5Unified.h>
@@ -39,6 +40,7 @@ typedef struct UserContext {
   Geolocation *geo;
   Timers timers;
   bh1750_handle_t light_sensor;
+  PM25 *pm25;
 } UserContext;
 
 bool bh1750_get(bh1750_handle_t bh1750, float *output);
@@ -111,7 +113,12 @@ void update_screen(UserContext *user_ctx) {
   char format[] = "%H:%M";
   get_time(format, time_buf, sizeof(time_buf));
   ESP_LOGI(TAG, "%s", time_buf);
-  M5.Lcd.printf("%s", time_buf);
+  M5.Lcd.printf("%s\n", time_buf);
+  PMSAQIdata data;
+  if (user_ctx->pm25->get(&data)) {
+    ESP_LOGI(TAG, "pm25: %d", data.pm25_standard);
+    M5.Lcd.printf("pm25: %d", data.pm25_standard);
+  }
 }
 
 void wake_up(UserContext *user_ctx) {
@@ -295,6 +302,7 @@ extern "C" void app_main(void) {
   i2c_bus_handle_t i2c_bus = nullptr;
   bh1750_handle_t bh1750 = nullptr;
   bh1750_init(&i2c_bus, &bh1750);
+
   esp_err_t err = nvs_flash_init();
 
   if (err == ESP_ERR_NVS_NO_FREE_PAGES ||
@@ -309,12 +317,14 @@ extern "C" void app_main(void) {
   M5.Lcd.setBrightness(50);
   M5.Lcd.setTextSize(1.5);
   Geolocation geo;
+  PM25 pm25(UART_NUM_2);
   UserContext userContext = {
       .str_ip = "",
       .actionQueue = xQueueCreate(10, sizeof(struct Action *)),
       .geo = &geo,
       .timers = {0, 0, 0},
       .light_sensor = bh1750,
+      .pm25 = &pm25,
   };
   auto wakeup_cause = esp_sleep_get_wakeup_cause();
   if (wakeup_cause == ESP_SLEEP_WAKEUP_EXT1 ||

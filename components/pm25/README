@@ -1,0 +1,21 @@
+# PM 2.5 Air Quality sensor for espidf
+
+This library is an adatation of [Adafruit PM2.5 Air Quality sensor](https://github.com/adafruit/Adafruit_PM25AQI) library  for espidf
+
+This library for espidf works with [PM2.5 Air Quality Module](https://shop.m5stack.com/products/pm2-5-air-quality-kit) from M5stack.
+
+## Installation
+
+```sh
+    mkdir components
+    cd components
+    git submodule add <gitrepo>
+```
+then in idf_component_register in the file CMakeLists.txt you will add
+
+```
+idf_component_register(
+    ...
+    REQUIRES pm25
+)
+```
