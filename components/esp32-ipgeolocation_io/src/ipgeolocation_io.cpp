@@ -5,10 +5,11 @@
 #include <esp_log.h>
 #include <string>
 
-#ifndef CONFIG_IPGEOLOCATION_IO_API_KEY
-#define CONFIG_IPGEOLOCATION_IO_API_KEY "c882ac7eeafe4b4ea7ed5e7c9f474540"
+#ifndef CONFIG_IP_GEOLOCATION_IO_API_KEY
+#error Please set GEOLOCATION_IO_API_KEY in menu config
+#define CONFIG_IPGEOLOCATION_IO_API_KEY ""
 #endif
-#define CLIENT_API_KEY CONFIG_IPGEOLOCATION_IO_API_KEY
+#define API_KEY CONFIG_IP_GEOLOCATION_IO_API_KEY
 
 #define WEB_URL "https://api.ipgeolocation.io"
 #define GEOLOC "/ipgeo"
@@ -62,7 +63,7 @@ int IpGeolocationIo::_https_with_hostname_params(const char *path,
   char *output_buffer = NULL;
   char *params_str = params->get_str_parameter();
   const std::string url = std::string(WEB_URL) + path +
-                          std::string("?apiKey=" CLIENT_API_KEY) + params_str;
+                          std::string("?apiKey=" API_KEY) + params_str;
   free(params_str);
   config.url = url.c_str();
   config.crt_bundle_attach = esp_crt_bundle_attach;

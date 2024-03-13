@@ -91,8 +91,6 @@ void action_task(void *pvParameter) {
         auto test = Geolocation();
         test.update_geoloc();
         ESP_LOGI(TAG, "city: %s", test.city());
-        ESP_LOGI(TAG, "tz: %s", test.tz());
-        ESP_LOGI(TAG, "tz posix: %s", test.posix_tz());
         settimezone(test.posix_tz());
         start_or_restart_timer(do_nothing_timer, 3000000);
         time_t now;

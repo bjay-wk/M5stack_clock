@@ -1,0 +1,9 @@
+menu "Ip Geolocation Io"
+
+config IP_GEOLOCATION_IO_API_KEY
+    string "api key"
+    default "apikey"
+	help
+	api key
+
+endmenu
