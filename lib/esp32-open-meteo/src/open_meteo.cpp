@@ -13,10 +13,6 @@
 #define MAX_HTTP_OUTPUT_BUFFER_CALLOC 26 * 1024
 #define ARRAY_LENGTH(array) (sizeof((array)) / sizeof((array)[0]))
 
-#ifdef CONFIG_OPEN_METEO_API_KEY
-#define OPEN_METEO_API_KEY CONFIG_OPEN_METEO_API_KEY
-#endif
-
 namespace OM_SDK {
 
 const char *const *EnumNamesTimeParams() {
@@ -318,7 +314,6 @@ void filterTimeParams(TimeParam *params, const TimeParam *filter,
     while (i < filter_size && filter[i] != *value) {
       ++i;
     }
-    ESP_LOGI(TAG, "toto %d, %d", i, filter_size);
     if (i == filter_size) {
       *value = undefined;
     }
@@ -409,9 +404,9 @@ std::string paramsToString(const OpenMeteoParams *p) {
   std::stringstream ss;
   ss << "?latitude=" << p->latitude << "&longitude=" << p->longitude
      << "&format=flatbuffers";
-#ifdef OPEN_METEO_API_KEY
-  ss << ",apikey=" OPEN_METEO_API_KEY;
-#endif
+  if (strcmp(CONFIG_OPEN_METEO_API_KEY, "")) {
+    ss << ",apikey=" CONFIG_OPEN_METEO_API_KEY;
+  }
   bool force_timezone_to_auto = false;
   if (!p->elevation_default)
     ss << "&elevation=" << p->elevation;
@@ -482,7 +477,6 @@ int https_with_hostname_params(const char *path, const OpenMeteoParams *params,
   esp_http_client_config_t config = {};
   char *output_buffer = NULL;
   const std::string url = std::string(WEB_URL) + path + paramsToString(params);
-  ESP_LOGI(TAG, "%s", url.c_str());
   config.url = url.c_str();
   config.crt_bundle_attach = esp_crt_bundle_attach;
   config.transport_type = HTTP_TRANSPORT_OVER_SSL;
@@ -509,11 +503,9 @@ int https_with_hostname_params(const char *path, const OpenMeteoParams *params,
       total_read += read;
     } while (read > 0);
     if (output) {
-      ESP_LOGI(TAG, "%s", output_buffer);
       *output = (openmeteo_sdk::WeatherApiResponse *)
           openmeteo_sdk::GetSizePrefixedWeatherApiResponse(output_buffer);
     }
-    // TODO check that
     free(output_buffer);
   }
 

@@ -154,5 +154,6 @@ struct OpenMeteoParams {
   Cell_selection cell_selection{undefined_selection};
 };
 
-int get_weather(OpenMeteoParams *params);
+int get_weather(OpenMeteoParams *params,
+                openmeteo_sdk::WeatherApiResponse **output);
 } // namespace OM_SDK

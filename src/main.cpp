@@ -15,9 +15,16 @@
 
 const char TAG[] = "main";
 
+typedef struct Timers {
+  esp_timer_handle_t do_nothing;
+  esp_timer_handle_t sleep;
+  esp_timer_handle_t time;
+} Timers;
+
 typedef struct UserContext {
   char str_ip[16];
   QueueHandle_t actionQueue;
+  Timers timers;
 } UserContext;
 
 void do_nothing(void *pvParameter) {
@@ -29,6 +36,13 @@ void do_nothing(void *pvParameter) {
 
 void sleep_action(void *pvParameter) {}
 
+void time_action(void *pvParameter) {
+  char time_buf[6] = {0};
+  char format[] = "%H:%M";
+  get_time(format, time_buf, sizeof(time_buf));
+  M5.Lcd.printf("%s\n", time_buf);
+}
+
 void start_or_restart_timer(esp_timer_handle_t single_timer,
                             uint64_t timeout_us) {
   if (esp_timer_is_active(single_timer))
@@ -37,29 +51,41 @@ void start_or_restart_timer(esp_timer_handle_t single_timer,
     ESP_ERROR_CHECK(esp_timer_start_once(single_timer, timeout_us));
 }
 
-void action_task(void *pvParameter) {
-  UserContext *user_ctx = (UserContext *)pvParameter;
-  bool connected = false;
-  Action *action = nullptr;
+void init_timers(UserContext *user_ctx) {
+  Timers *timers = &(user_ctx->timers);
   const esp_timer_create_args_t single_timer_args = {
       .callback = &sleep_action,
-      .arg = pvParameter,
+      .arg = user_ctx,
       .dispatch_method = ESP_TIMER_TASK,
       .name = "sleep_timer",
       .skip_unhandled_events = false};
-
-  esp_timer_handle_t single_timer;
-  ESP_ERROR_CHECK(esp_timer_create(&single_timer_args, &single_timer));
+  ESP_ERROR_CHECK(esp_timer_create(&single_timer_args, &timers->sleep));
 
   const esp_timer_create_args_t do_nothing_timer_args = {
       .callback = &do_nothing,
-      .arg = pvParameter,
+      .arg = user_ctx,
       .dispatch_method = ESP_TIMER_TASK,
       .name = "do_nothing",
       .skip_unhandled_events = false};
-  esp_timer_handle_t do_nothing_timer;
-  ESP_ERROR_CHECK(esp_timer_create(&do_nothing_timer_args, &do_nothing_timer));
+  ESP_ERROR_CHECK(
+      esp_timer_create(&do_nothing_timer_args, &timers->do_nothing));
 
+  const esp_timer_create_args_t time_timer_args = {
+      .callback = &time_action,
+      .arg = user_ctx,
+      .dispatch_method = ESP_TIMER_TASK,
+      .name = "time",
+      .skip_unhandled_events = false};
+  ESP_ERROR_CHECK(esp_timer_create(&time_timer_args, &timers->time));
+  esp_timer_start_periodic(timers->time, 1000 * 1000 * 30);
+}
+
+void action_task(void *pvParameter) {
+  UserContext *user_ctx = (UserContext *)pvParameter;
+  Timers *timers = &user_ctx->timers;
+  bool connected = false;
+  Action *action = nullptr;
+  init_timers(user_ctx);
   while (1) {
     if (xQueueReceive(user_ctx->actionQueue, &action, (TickType_t)1000)) {
       if (!connected && action->action != WifiConnected &&
@@ -69,9 +95,9 @@ void action_task(void *pvParameter) {
         continue;
       }
       if (action->action == ApStarted) {
-        start_or_restart_timer(single_timer, 10 * 60000000);
+        start_or_restart_timer(timers->sleep, 10 * 60000000);
       } else {
-        start_or_restart_timer(single_timer, 5 * 60000000);
+        start_or_restart_timer(timers->sleep, 5 * 60000000);
       }
       switch (action->action) {
       case WifiConnected: {
@@ -92,7 +118,7 @@ void action_task(void *pvParameter) {
         test.update_geoloc();
         ESP_LOGI(TAG, "city: %s", test.city());
         settimezone(test.posix_tz());
-        start_or_restart_timer(do_nothing_timer, 3000000);
+        start_or_restart_timer(timers->do_nothing, 3000000);
         time_t now;
         time(&now);
         OM_SDK::TimeParam daily[] = {OM_SDK::temperature_2m,
@@ -103,7 +129,8 @@ void action_task(void *pvParameter) {
             .current = daily,
             .forecast_days = 4,
         };
-        //OM_SDK::get_weather(&p);
+        openmeteo_sdk::WeatherApiResponse *output;
+        OM_SDK::get_weather(&p, &output);
         break;
       }
       case WifiDisconnected:
@@ -114,7 +141,7 @@ void action_task(void *pvParameter) {
         M5.Lcd.printf("Wifi Disconnected");
         ESP_LOGI(TAG, "Wifi Disconnected");
         M5.Lcd.fillScreen(BLACK);
-        start_or_restart_timer(do_nothing_timer, 3000000);
+        start_or_restart_timer(timers->do_nothing, 3000000);
         break;
       case ApStarted:
         M5.Lcd.wakeup();
@@ -198,6 +225,7 @@ extern "C" void app_main(void) {
   UserContext userContext = {
       .str_ip = "",
       .actionQueue = xQueueCreate(10, sizeof(struct Action *)),
+      .timers = {0, 0, 0},
   };
   wifi_manager_start(&userContext);
   esp_netif_set_hostname(wifi_manager_get_esp_netif_ap(), "esp-32-finger-ap");
