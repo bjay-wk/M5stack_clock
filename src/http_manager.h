@@ -4,7 +4,8 @@
 #include "string.h"
 
 typedef enum ActionEnum {
-  DoNothing,
+  ScreenOff,
+  UpdateScreen,
   WifiConnected,
   WifiDisconnected,
   ApStarted,
@@ -14,7 +15,7 @@ class Action {
   char *_value = nullptr;
 
 public:
-  ActionEnum action = ActionEnum::DoNothing;
+  ActionEnum action = ActionEnum::ScreenOff;
   char *get_value() { return _value; }
   void set_value(const char *value) {
     if (_value != nullptr)

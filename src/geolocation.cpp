@@ -58,10 +58,10 @@ int Geolocation::update_geoloc() {
 
   if (return_value == 200 && data) {
     char *tmp_str = cJSON_GetObjectItemCaseSensitive(data, "city")->valuestring;
-    strcpy(_country, tmp_str ? tmp_str : "");
+    strcpy(_city, tmp_str ? tmp_str : "");
     tmp_str =
         cJSON_GetObjectItemCaseSensitive(data, "country_name")->valuestring;
-    strcpy(_city, tmp_str ? tmp_str : "");
+    strcpy(_country, tmp_str ? tmp_str : "");
     cJSON *timezone = cJSON_GetObjectItemCaseSensitive(data, "time_zone");
     tmp_str = cJSON_GetObjectItemCaseSensitive(timezone, "name")->valuestring;
     strcpy(_tz, tmp_str ? tmp_str : "");

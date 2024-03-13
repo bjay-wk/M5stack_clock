@@ -13,34 +13,37 @@
 #include <nvs_flash.h>
 #include <wifi_manager.h>
 
+#define U_TO_SEC 1000000
+#define U_TO_MIN 1000000 * 60
 const char TAG[] = "main";
 
 typedef struct Timers {
-  esp_timer_handle_t do_nothing;
+  esp_timer_handle_t screen_off;
   esp_timer_handle_t sleep;
-  esp_timer_handle_t time;
+  esp_timer_handle_t screen_update;
 } Timers;
 
 typedef struct UserContext {
   char str_ip[16];
   QueueHandle_t actionQueue;
+  Geolocation *geo;
   Timers timers;
 } UserContext;
 
-void do_nothing(void *pvParameter) {
+void screen_off(void *pvParameter) {
   UserContext *user_ctx = (UserContext *)pvParameter;
   Action *new_action = (Action *)calloc(sizeof(Action), 1);
-  new_action->action = DoNothing;
+  new_action->action = ScreenOff;
   xQueueSend(user_ctx->actionQueue, (void *)&new_action, (TickType_t)0);
 }
 
-void sleep_action(void *pvParameter) {}
+void sleep_action(void *pvParameter) { M5.Power.deepSleep(0ULL, true); }
 
-void time_action(void *pvParameter) {
-  char time_buf[6] = {0};
-  char format[] = "%H:%M";
-  get_time(format, time_buf, sizeof(time_buf));
-  M5.Lcd.printf("%s\n", time_buf);
+void screen_update_cb(void *pvParameter) {
+  UserContext *user_ctx = (UserContext *)pvParameter;
+  Action *new_action = (Action *)calloc(sizeof(Action), 1);
+  new_action->action = UpdateScreen;
+  xQueueSend(user_ctx->actionQueue, (void *)&new_action, 100);
 }
 
 void start_or_restart_timer(esp_timer_handle_t single_timer,
@@ -49,6 +52,31 @@ void start_or_restart_timer(esp_timer_handle_t single_timer,
     ESP_ERROR_CHECK(esp_timer_restart(single_timer, timeout_us));
   else
     ESP_ERROR_CHECK(esp_timer_start_once(single_timer, timeout_us));
+}
+
+void update_screen(UserContext *user_ctx) {
+  M5.Lcd.fillScreen(BLACK);
+  M5.Lcd.setCursor(0, 0);
+  char time_buf[6] = {0};
+  char format[] = "%H:%M";
+  get_time(format, time_buf, sizeof(time_buf));
+  ESP_LOGI(TAG, "%s", time_buf);
+  M5.Lcd.printf("%s", time_buf);
+}
+
+void wake_up(UserContext *user_ctx) {
+  check_and_update_ntp_time();
+  settimezone(user_ctx->geo->posix_tz());
+  OM_SDK::TimeParam daily[] = {OM_SDK::temperature_2m, OM_SDK::max_params};
+  OM_SDK::OpenMeteoParams p{
+      .latitude = user_ctx->geo->latitude(),
+      .longitude = user_ctx->geo->longitude(),
+      .current = daily,
+      .forecast_days = 4,
+  };
+  openmeteo_sdk::WeatherApiResponse *output;
+  OM_SDK::get_weather(&p, &output);
+  start_or_restart_timer(user_ctx->timers.sleep, 3000000);
 }
 
 void init_timers(UserContext *user_ctx) {
@@ -61,23 +89,23 @@ void init_timers(UserContext *user_ctx) {
       .skip_unhandled_events = false};
   ESP_ERROR_CHECK(esp_timer_create(&single_timer_args, &timers->sleep));
 
-  const esp_timer_create_args_t do_nothing_timer_args = {
-      .callback = &do_nothing,
+  const esp_timer_create_args_t screen_off_timer_args = {
+      .callback = &screen_off,
       .arg = user_ctx,
       .dispatch_method = ESP_TIMER_TASK,
-      .name = "do_nothing",
+      .name = "screen_off",
       .skip_unhandled_events = false};
   ESP_ERROR_CHECK(
-      esp_timer_create(&do_nothing_timer_args, &timers->do_nothing));
+      esp_timer_create(&screen_off_timer_args, &timers->screen_off));
 
   const esp_timer_create_args_t time_timer_args = {
-      .callback = &time_action,
+      .callback = &screen_update_cb,
       .arg = user_ctx,
       .dispatch_method = ESP_TIMER_TASK,
-      .name = "time",
+      .name = "screen_update",
       .skip_unhandled_events = false};
-  ESP_ERROR_CHECK(esp_timer_create(&time_timer_args, &timers->time));
-  esp_timer_start_periodic(timers->time, 1000 * 1000 * 30);
+  ESP_ERROR_CHECK(esp_timer_create(&time_timer_args, &timers->screen_update));
+  esp_timer_start_periodic(timers->screen_update, U_TO_SEC * 30);
 }
 
 void action_task(void *pvParameter) {
@@ -95,42 +123,21 @@ void action_task(void *pvParameter) {
         continue;
       }
       if (action->action == ApStarted) {
-        start_or_restart_timer(timers->sleep, 10 * 60000000);
+        start_or_restart_timer(timers->sleep, 10 * U_TO_MIN);
       } else {
-        start_or_restart_timer(timers->sleep, 5 * 60000000);
+        start_or_restart_timer(timers->sleep, 5 * U_TO_MIN);
       }
       switch (action->action) {
+      case UpdateScreen: {
+        update_screen(user_ctx);
+        break;
+      }
       case WifiConnected: {
         connected = true;
-        check_and_update_ntp_time();
-        char time_buf[6] = {0};
-        char format[] = "%H:%M";
+        user_ctx->geo->update_geoloc();
 
-        M5.Lcd.wakeup();
-        M5.Lcd.fillScreen(BLACK);
-        M5.Lcd.setCursor(0, 0);
-        M5.Lcd.printf("Wifi Connected\nIP:\n%s\n", user_ctx->str_ip);
-        ESP_LOGI(TAG, "Wifi Connected");
-        get_time(format, time_buf, sizeof(time_buf));
-        M5.Lcd.printf("%s\n", time_buf);
-        ESP_LOGI(TAG, "sntp time: %s", time_buf);
-        auto test = Geolocation();
-        test.update_geoloc();
-        ESP_LOGI(TAG, "city: %s", test.city());
-        settimezone(test.posix_tz());
-        start_or_restart_timer(timers->do_nothing, 3000000);
-        time_t now;
-        time(&now);
-        OM_SDK::TimeParam daily[] = {OM_SDK::temperature_2m,
-                                     OM_SDK::max_params};
-        OM_SDK::OpenMeteoParams p{
-            .latitude = test.latitude(),
-            .longitude = test.longitude(),
-            .current = daily,
-            .forecast_days = 4,
-        };
-        openmeteo_sdk::WeatherApiResponse *output;
-        OM_SDK::get_weather(&p, &output);
+        start_or_restart_timer(timers->screen_off, 4000000);
+        wake_up(user_ctx);
         break;
       }
       case WifiDisconnected:
@@ -141,7 +148,7 @@ void action_task(void *pvParameter) {
         M5.Lcd.printf("Wifi Disconnected");
         ESP_LOGI(TAG, "Wifi Disconnected");
         M5.Lcd.fillScreen(BLACK);
-        start_or_restart_timer(timers->do_nothing, 3000000);
+        start_or_restart_timer(timers->screen_off, 3000000);
         break;
       case ApStarted:
         M5.Lcd.wakeup();
@@ -152,7 +159,7 @@ void action_task(void *pvParameter) {
             DEFAULT_AP_SSID, DEFAULT_AP_PASSWORD, DEFAULT_AP_IP);
         ESP_LOGI(TAG, "Ap Started");
         break;
-      case DoNothing:
+      case ScreenOff:
         M5.Lcd.fillScreen(BLACK);
         M5.Display.sleep();
         break;
@@ -221,10 +228,11 @@ extern "C" void app_main(void) {
   M5.Lcd.setTextSize(1.5);
   M5.Lcd.print("Power On");
   ESP_LOGI(TAG, "POWERON");
-
+  Geolocation geo;
   UserContext userContext = {
       .str_ip = "",
       .actionQueue = xQueueCreate(10, sizeof(struct Action *)),
+      .geo = &geo,
       .timers = {0, 0, 0},
   };
   wifi_manager_start(&userContext);
@@ -247,14 +255,22 @@ extern "C" void app_main(void) {
   http_app_set_handler_hook(HTTP_GET, &wifi_handler);
 
   xTaskCreate(&action_task, "action_task", 8192, &userContext, 5, nullptr);
-  // fingerMng.fingerprint->fpm_setAddMode(0x34);
-  // ESP_LOGI(TAG, "IDLE yes");
 
   while (1) {
     M5.update();
     if (M5.BtnA.wasClicked()) {
       Action *new_action = (Action *)calloc(sizeof(Action), 1);
-      new_action->action = DoNothing;
+      new_action->action = UpdateScreen;
+      xQueueSend(userContext.actionQueue, (void *)&new_action, 100);
+    }
+    if (M5.BtnB.wasClicked()) {
+      Action *new_action = (Action *)calloc(sizeof(Action), 1);
+      new_action->action = UpdateScreen;
+      xQueueSend(userContext.actionQueue, (void *)&new_action, 100);
+    }
+    if (M5.BtnC.wasClicked()) {
+      Action *new_action = (Action *)calloc(sizeof(Action), 1);
+      new_action->action = UpdateScreen;
       xQueueSend(userContext.actionQueue, (void *)&new_action, 100);
     }
 
