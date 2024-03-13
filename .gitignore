@@ -36,5 +36,5 @@
 .vscode
 sdkconfig.*
 managed_components
-
-lib/esp32-open-meteo/include/weather_api_generated.h
+build_flatbuffers
+*weather_api_generated.h

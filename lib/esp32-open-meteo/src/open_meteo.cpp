@@ -13,6 +13,10 @@
 #define MAX_HTTP_OUTPUT_BUFFER_CALLOC 26 * 1024
 #define ARRAY_LENGTH(array) (sizeof((array)) / sizeof((array)[0]))
 
+#ifdef CONFIG_OPEN_METEO_API_KEY
+#define OPEN_METEO_API_KEY CONFIG_OPEN_METEO_API_KEY
+#endif
+
 namespace OM_SDK {
 
 const char *const *EnumNamesTimeParams() {

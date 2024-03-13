@@ -4,7 +4,7 @@ import os
 Import("env")
 
 flatbuffer_dir = "extra_lib/flatbuffers"
-flatbuffer_build_dir = ".pio/build/flatbuffers"
+flatbuffer_build_dir = "build_flatbuffers"
 weather_api = "include/weather_api_generated.h"
 
 def remove_file(file_name):
@@ -24,4 +24,4 @@ else:
     env.Execute(f"cmake -G \"Unix Makefiles\" -DCMAKE_BUILD_TYPE=Release -S {flatbuffer_dir} -B {flatbuffer_build_dir}")
     env.Execute(f"make flatc -C {flatbuffer_build_dir} -j")
   if not isfile(weather_api):
-    env.Execute(f"{flatbuffer_build_dir}/flatc -o include --cpp extra_lib/open_meteo_sdk/flatbuffers/weather_api.fbs")
+    env.Execute(f"{flatbuffer_build_dir}/flatc -o include --cpp extra_lib/open-meteo-sdk/flatbuffers/weather_api.fbs")
