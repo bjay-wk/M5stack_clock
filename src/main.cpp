@@ -1,3 +1,4 @@
+#include "bh1750.h"
 #include "geolocation.hpp"
 #include "http_manager.h"
 #include "open_meteo.hpp"
@@ -16,6 +17,11 @@
 #include <nvs_flash.h>
 #include <wifi_manager.h>
 
+#define I2C_MASTER_SCL_IO (gpio_num_t)22
+#define I2C_MASTER_SDA_IO (gpio_num_t)21
+#define I2C_MASTER_NUM I2C_NUM_1
+#define I2C_MASTER_FREQ_HZ 100000
+
 #define U_TO_SEC 1000000
 #define U_TO_MIN U_TO_SEC * 60
 const char TAG[] = "main";
@@ -24,6 +30,7 @@ typedef struct Timers {
   esp_timer_handle_t screen_off;
   esp_timer_handle_t sleep;
   esp_timer_handle_t screen_update;
+
 } Timers;
 
 typedef struct UserContext {
@@ -31,7 +38,10 @@ typedef struct UserContext {
   QueueHandle_t actionQueue;
   Geolocation *geo;
   Timers timers;
+  bh1750_handle_t light_sensor;
 } UserContext;
+
+bool bh1750_get(bh1750_handle_t bh1750, float *output);
 
 void sleep_action(void *pvParameter) {
   ESP_LOGI(TAG, "Entering sleep mode");
@@ -86,6 +96,15 @@ void screen_off(void *pvParameter) {
 
 void update_screen(UserContext *user_ctx) {
   M5.Lcd.wakeup();
+
+  float lux = 0;
+  bh1750_get(user_ctx->light_sensor, &lux);
+  if (lux > 5000)
+    lux = 5000;
+  lux = lux * 255 / 5000;
+  if (lux < 1)
+    lux = 1;
+  M5.Lcd.setBrightness(lux);
   M5.Lcd.fillScreen(BLACK);
   M5.Lcd.setCursor(0, 0);
   char time_buf[6] = {0};
@@ -243,8 +262,39 @@ void cb_connection_AP_started(void *pvParameter, void *user_ctx) {
   xQueueSend(userContext->actionQueue, (void *)&new_action, 100);
 }
 
+static void bh1750_init(i2c_bus_handle_t *i2c_bus, bh1750_handle_t *bh1750) {
+  i2c_config_t conf = {
+      .mode = I2C_MODE_MASTER,
+      .sda_io_num = I2C_MASTER_SDA_IO,
+      .scl_io_num = I2C_MASTER_SCL_IO,
+      .sda_pullup_en = GPIO_PULLUP_ENABLE,
+      .scl_pullup_en = GPIO_PULLUP_ENABLE,
+      .master = {.clk_speed = I2C_MASTER_FREQ_HZ},
+      .clk_flags = 0,
+  };
+  *i2c_bus = i2c_bus_create(I2C_MASTER_NUM, &conf);
+  *bh1750 = bh1750_create(*i2c_bus, BH1750_I2C_ADDRESS_DEFAULT);
+}
+
+bool bh1750_get(bh1750_handle_t bh1750, float *output) {
+  bh1750_power_on(bh1750);
+  bh1750_set_measure_mode(bh1750, BH1750_ONETIME_4LX_RES);
+  vTaskDelay(30 / portTICK_RATE_MS);
+  auto ret = bh1750_get_data(bh1750, output);
+  bh1750_power_down(bh1750);
+  if (ret == ESP_OK) {
+    ESP_LOGI(TAG, "bh1750 val(one time mode): %f", *output);
+    return true;
+  }
+  ESP_LOGE(TAG, "No ack, sensor not connected...\n");
+  return false;
+}
+
 extern "C" void app_main(void) {
   flatbuffers::FlatBufferBuilder builder;
+  i2c_bus_handle_t i2c_bus = nullptr;
+  bh1750_handle_t bh1750 = nullptr;
+  bh1750_init(&i2c_bus, &bh1750);
   esp_err_t err = nvs_flash_init();
 
   if (err == ESP_ERR_NVS_NO_FREE_PAGES ||
@@ -264,6 +314,7 @@ extern "C" void app_main(void) {
       .actionQueue = xQueueCreate(10, sizeof(struct Action *)),
       .geo = &geo,
       .timers = {0, 0, 0},
+      .light_sensor = bh1750,
   };
   auto wakeup_cause = esp_sleep_get_wakeup_cause();
   if (wakeup_cause == ESP_SLEEP_WAKEUP_EXT1 ||
@@ -319,4 +370,6 @@ extern "C" void app_main(void) {
 
     M5.delay(100);
   }
+  bh1750_delete(&bh1750);
+  i2c_bus_delete(&i2c_bus);
 }
