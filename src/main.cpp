@@ -16,6 +16,7 @@
 #include <flatbuffers/flatbuffers.h>
 #include <http_app.h>
 #include <nvs_flash.h>
+#include <sht3x.h>
 #include <wifi_manager.h>
 
 #define I2C_MASTER_SCL_IO (gpio_num_t)22
@@ -41,6 +42,7 @@ typedef struct UserContext {
   Timers timers;
   bh1750_handle_t light_sensor;
   PM25 *pm25;
+  sht3x_handle_t sht3x;
 } UserContext;
 
 bool bh1750_get(bh1750_handle_t bh1750, float *output);
@@ -98,7 +100,7 @@ void screen_off(void *pvParameter) {
 
 void update_screen(UserContext *user_ctx) {
   M5.Lcd.wakeup();
-
+  float tem_val, hum_val;
   float lux = 0;
   bh1750_get(user_ctx->light_sensor, &lux);
   if (lux > 5000)
@@ -116,8 +118,11 @@ void update_screen(UserContext *user_ctx) {
   M5.Lcd.printf("%s\n", time_buf);
   PMSAQIdata data;
   if (user_ctx->pm25->get(&data)) {
-    ESP_LOGI(TAG, "pm25: %d", data.pm25_standard);
-    M5.Lcd.printf("pm25: %d", data.pm25_standard);
+    M5.Lcd.printf("pm25: %d\n", data.pm25_standard);
+  }
+  if (sht3x_get_humiture(user_ctx->sht3x, &tem_val, &hum_val) == 0) {
+    M5.Lcd.printf("temperature %.2f°C\n", tem_val);
+    M5.Lcd.printf("humidity:%.2f %%\n", hum_val);
   }
 }
 
@@ -269,7 +274,8 @@ void cb_connection_AP_started(void *pvParameter, void *user_ctx) {
   xQueueSend(userContext->actionQueue, (void *)&new_action, 100);
 }
 
-static void bh1750_init(i2c_bus_handle_t *i2c_bus, bh1750_handle_t *bh1750) {
+static void i2c_init(i2c_bus_handle_t *i2c_bus, bh1750_handle_t *bh1750,
+                     sht3x_handle_t *sht3x) {
   i2c_config_t conf = {
       .mode = I2C_MODE_MASTER,
       .sda_io_num = I2C_MASTER_SDA_IO,
@@ -281,6 +287,9 @@ static void bh1750_init(i2c_bus_handle_t *i2c_bus, bh1750_handle_t *bh1750) {
   };
   *i2c_bus = i2c_bus_create(I2C_MASTER_NUM, &conf);
   *bh1750 = bh1750_create(*i2c_bus, BH1750_I2C_ADDRESS_DEFAULT);
+  *sht3x = sht3x_create(*i2c_bus, SHT3x_ADDR_PIN_SELECT_VSS);
+  sht3x_heater(*sht3x, SHT3x_HEATER_DISABLED);
+  sht3x_set_measure_mode(*sht3x, SHT3x_PER_2_MEDIUM);
 }
 
 bool bh1750_get(bh1750_handle_t bh1750, float *output) {
@@ -301,7 +310,8 @@ extern "C" void app_main(void) {
   flatbuffers::FlatBufferBuilder builder;
   i2c_bus_handle_t i2c_bus = nullptr;
   bh1750_handle_t bh1750 = nullptr;
-  bh1750_init(&i2c_bus, &bh1750);
+  sht3x_handle_t sht3x = nullptr;
+  i2c_init(&i2c_bus, &bh1750, &sht3x);
 
   esp_err_t err = nvs_flash_init();
 
@@ -325,6 +335,7 @@ extern "C" void app_main(void) {
       .timers = {0, 0, 0},
       .light_sensor = bh1750,
       .pm25 = &pm25,
+      .sht3x = sht3x,
   };
   auto wakeup_cause = esp_sleep_get_wakeup_cause();
   if (wakeup_cause == ESP_SLEEP_WAKEUP_EXT1 ||
