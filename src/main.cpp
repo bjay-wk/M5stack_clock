@@ -14,7 +14,7 @@
 #include <wifi_manager.h>
 
 #define U_TO_SEC 1000000
-#define U_TO_MIN 1000000 * 60
+#define U_TO_MIN U_TO_SEC * 60
 const char TAG[] = "main";
 
 typedef struct Timers {
@@ -30,14 +30,7 @@ typedef struct UserContext {
   Timers timers;
 } UserContext;
 
-void screen_off(void *pvParameter) {
-  UserContext *user_ctx = (UserContext *)pvParameter;
-  Action *new_action = (Action *)calloc(sizeof(Action), 1);
-  new_action->action = ScreenOff;
-  xQueueSend(user_ctx->actionQueue, (void *)&new_action, (TickType_t)0);
-}
-
-void sleep_action(void *pvParameter) { M5.Power.deepSleep(0ULL, true); }
+void sleep_action(void *pvParameter) {}
 
 void screen_update_cb(void *pvParameter) {
   UserContext *user_ctx = (UserContext *)pvParameter;
@@ -46,15 +39,30 @@ void screen_update_cb(void *pvParameter) {
   xQueueSend(user_ctx->actionQueue, (void *)&new_action, 100);
 }
 
-void start_or_restart_timer(esp_timer_handle_t single_timer,
-                            uint64_t timeout_us) {
-  if (esp_timer_is_active(single_timer))
-    ESP_ERROR_CHECK(esp_timer_restart(single_timer, timeout_us));
+void start_or_restart_timer(esp_timer_handle_t timer, uint64_t timeout_us) {
+  if (esp_timer_is_active(timer))
+    ESP_ERROR_CHECK(esp_timer_restart(timer, timeout_us));
   else
-    ESP_ERROR_CHECK(esp_timer_start_once(single_timer, timeout_us));
+    ESP_ERROR_CHECK(esp_timer_start_once(timer, timeout_us));
+}
+
+void update_screen_off_timer(UserContext *user_ctx) {
+  start_or_restart_timer(user_ctx->timers.screen_off, 3 * U_TO_MIN);
+}
+
+void screen_off(void *pvParameter) {
+  UserContext *user_ctx = (UserContext *)pvParameter;
+  if (esp_timer_is_active(user_ctx->timers.screen_update)) {
+    esp_timer_stop(user_ctx->timers.screen_update);
+  }
+  Action *new_action = (Action *)calloc(sizeof(Action), 1);
+  new_action->action = ScreenOff;
+  xQueueSend(user_ctx->actionQueue, (void *)&new_action, (TickType_t)0);
+  start_or_restart_timer(user_ctx->timers.sleep, 5 * U_TO_MIN);
 }
 
 void update_screen(UserContext *user_ctx) {
+  M5.Lcd.wakeup();
   M5.Lcd.fillScreen(BLACK);
   M5.Lcd.setCursor(0, 0);
   char time_buf[6] = {0};
@@ -76,7 +84,7 @@ void wake_up(UserContext *user_ctx) {
   };
   openmeteo_sdk::WeatherApiResponse *output;
   OM_SDK::get_weather(&p, &output);
-  start_or_restart_timer(user_ctx->timers.sleep, 3000000);
+  ;
 }
 
 void init_timers(UserContext *user_ctx) {
@@ -122,11 +130,6 @@ void action_task(void *pvParameter) {
         action = nullptr;
         continue;
       }
-      if (action->action == ApStarted) {
-        start_or_restart_timer(timers->sleep, 10 * U_TO_MIN);
-      } else {
-        start_or_restart_timer(timers->sleep, 5 * U_TO_MIN);
-      }
       switch (action->action) {
       case UpdateScreen: {
         update_screen(user_ctx);
@@ -135,8 +138,7 @@ void action_task(void *pvParameter) {
       case WifiConnected: {
         connected = true;
         user_ctx->geo->update_geoloc();
-
-        start_or_restart_timer(timers->screen_off, 4000000);
+        update_screen_off_timer(user_ctx);
         wake_up(user_ctx);
         break;
       }
@@ -148,7 +150,7 @@ void action_task(void *pvParameter) {
         M5.Lcd.printf("Wifi Disconnected");
         ESP_LOGI(TAG, "Wifi Disconnected");
         M5.Lcd.fillScreen(BLACK);
-        start_or_restart_timer(timers->screen_off, 3000000);
+        update_screen_off_timer(user_ctx);
         break;
       case ApStarted:
         M5.Lcd.wakeup();
@@ -162,6 +164,11 @@ void action_task(void *pvParameter) {
       case ScreenOff:
         M5.Lcd.fillScreen(BLACK);
         M5.Display.sleep();
+        break;
+      case ButtonClicked:
+        update_screen(user_ctx);
+        ESP_LOGI(TAG, "Button");
+        update_screen_off_timer(user_ctx);
         break;
       }
       free(action);
@@ -260,17 +267,20 @@ extern "C" void app_main(void) {
     M5.update();
     if (M5.BtnA.wasClicked()) {
       Action *new_action = (Action *)calloc(sizeof(Action), 1);
-      new_action->action = UpdateScreen;
+      new_action->action = ButtonClicked;
+      new_action->set_value("A");
       xQueueSend(userContext.actionQueue, (void *)&new_action, 100);
     }
     if (M5.BtnB.wasClicked()) {
       Action *new_action = (Action *)calloc(sizeof(Action), 1);
-      new_action->action = UpdateScreen;
+      new_action->action = ButtonClicked;
+      new_action->set_value("B");
       xQueueSend(userContext.actionQueue, (void *)&new_action, 100);
     }
     if (M5.BtnC.wasClicked()) {
       Action *new_action = (Action *)calloc(sizeof(Action), 1);
-      new_action->action = UpdateScreen;
+      new_action->action = ButtonClicked;
+      new_action->set_value("C");
       xQueueSend(userContext.actionQueue, (void *)&new_action, 100);
     }
 

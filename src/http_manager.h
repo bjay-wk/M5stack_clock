@@ -9,6 +9,7 @@ typedef enum ActionEnum {
   WifiConnected,
   WifiDisconnected,
   ApStarted,
+  ButtonClicked,
 } ActionEnum;
 
 class Action {
