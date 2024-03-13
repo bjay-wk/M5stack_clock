@@ -24,7 +24,13 @@
 #define NVS_LONGITUDE "LONG"
 #define NVS_IP "IP"
 
+int http_get(esp_http_client_config_t *config, esp_http_client_handle_t client,
+             char *output_buffer);
 int get_public_ip6(esp_ip6_addr_t *ip);
+void load_float(nvs_handle_t handle, const char *key, float *value);
+void load_string(nvs_handle_t handle, const char *key, char *value);
+esp_err_t save_float(nvs_handle_t handle, const char *key, float value);
+esp_err_t save_string(nvs_handle_t handle, const char *key, const char *value);
 
 Geolocation::Geolocation()
     : _latitude{0.0}, _longitude{0.0}, _city{""}, _country{""}, _tz{""},
@@ -38,7 +44,7 @@ int Geolocation::update_geoloc() {
   int response_code = get_public_ip6(&ip);
   if (response_code == 200) {
     if (_ip_set && !memcmp(&ip, &_public_ip, sizeof(ip))) {
-      ESP_LOGI(TAG, "public ip did not change, canceling update");
+      ESP_LOGI(TAG, "Public ip did not change, canceling update");
       return 200;
     }
     memcpy(&_public_ip, &ip, sizeof(ip));
@@ -72,34 +78,6 @@ int Geolocation::update_geoloc() {
   return return_value;
 }
 
-int http_get(esp_http_client_config_t *config, esp_http_client_handle_t client,
-             char *output_buffer) {
-  int data_len = 0;
-  char *data = NULL;
-  esp_err_t err = esp_http_client_open(client, data_len);
-  if (err != ESP_OK) {
-    ESP_LOGE(TAG, "Failed to open HTTP connection: %s", esp_err_to_name(err));
-  } else if (data != NULL &&
-             esp_http_client_write(client, data, data_len) < 0) {
-    ESP_LOGE(TAG, "Write failed");
-  } else if (esp_http_client_fetch_headers(client) < 0) {
-    ESP_LOGE(TAG, "HTTP client fetch headers failed");
-  } else {
-    int total_read = 0;
-    int read = 0;
-    do {
-      read = esp_http_client_read_response(client, output_buffer + total_read,
-                                           MAX_HTTP_OUTPUT_BUFFER_CALLOC -
-                                               total_read);
-      total_read += read;
-    } while (read > 0);
-  }
-  esp_http_client_close(client);
-  const int status_code = esp_http_client_get_status_code(client);
-  esp_http_client_cleanup(client);
-  return status_code;
-}
-
 int Geolocation::download_posix_tz() {
   esp_http_client_config_t config = {};
   char *output_buffer = (char *)calloc(MAX_HTTP_OUTPUT_BUFFER_CALLOC, 1);
@@ -125,37 +103,6 @@ int Geolocation::download_posix_tz() {
   }
   free(output_buffer);
   return code;
-}
-
-int get_public_ip6(esp_ip6_addr_t *ip) {
-  esp_http_client_config_t config = {};
-  char output_buffer[40] = {0};
-  config.url = "http://myexternalip.com/raw";
-  esp_http_client_handle_t client = esp_http_client_init(&config);
-  esp_http_client_set_method(client, HTTP_METHOD_GET);
-
-  int code = http_get(&config, client, output_buffer);
-  if (code == 200) {
-    esp_netif_str_to_ip6(output_buffer, ip);
-  }
-  return code;
-}
-
-esp_err_t save_string(nvs_handle_t handle, const char *key, const char *value) {
-  esp_err_t err = nvs_set_str(handle, key, value);
-  if (ESP_OK != err) {
-    ESP_LOGE(TAG, "%s: %s", key, esp_err_to_name(err));
-  }
-  return err;
-}
-
-esp_err_t save_float(nvs_handle_t handle, const char *key, float value) {
-  int32_t *casted_value = reinterpret_cast<int32_t *>(&value);
-  esp_err_t err = nvs_set_i32(handle, key, *casted_value);
-  if (ESP_OK != err) {
-    ESP_LOGE(TAG, "%s: %s", key, esp_err_to_name(err));
-  }
-  return err;
 }
 
 void Geolocation::save_data() {
@@ -186,6 +133,71 @@ void Geolocation::save_data() {
   nvs_close(handle);
 }
 
+void Geolocation::restore_data() {
+  ESP_LOGI(TAG, "Restore Data");
+  nvs_handle_t handle;
+  auto err = nvs_open(NVS_NAMESPACE, NVS_READONLY, &handle);
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "Error (%s) opening NVS handle!\n", esp_err_to_name(err));
+  }
+  load_string(handle, NVS_CITY, _city);
+  load_string(handle, NVS_COUNTRY, _country);
+  load_string(handle, NVS_TZ, _tz);
+  load_string(handle, NVS_POSIX_TZ, _posix_tz);
+  load_float(handle, NVS_LONGITUDE, &_longitude);
+  load_float(handle, NVS_LATITUDE, &_latitude);
+  size_t size = sizeof(_public_ip);
+  err = nvs_get_blob(handle, NVS_IP, &_public_ip, &size);
+  if (err == ESP_OK) {
+    _ip_set = true;
+  } else {
+    ESP_LOGE(TAG, "%s: %s", NVS_IP, esp_err_to_name(err));
+  }
+  nvs_close(handle);
+}
+
+int http_get(esp_http_client_config_t *config, esp_http_client_handle_t client,
+             char *output_buffer) {
+  int data_len = 0;
+  char *data = NULL;
+  esp_err_t err = esp_http_client_open(client, data_len);
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "Failed to open HTTP connection: %s", esp_err_to_name(err));
+  } else if (data != NULL &&
+             esp_http_client_write(client, data, data_len) < 0) {
+    ESP_LOGE(TAG, "Write failed");
+  } else if (esp_http_client_fetch_headers(client) < 0) {
+    ESP_LOGE(TAG, "HTTP client fetch headers failed");
+  } else {
+    int total_read = 0;
+    int read = 0;
+    do {
+      read = esp_http_client_read_response(client, output_buffer + total_read,
+                                           MAX_HTTP_OUTPUT_BUFFER_CALLOC -
+                                               total_read);
+      total_read += read;
+    } while (read > 0);
+  }
+  esp_http_client_close(client);
+  const int status_code = esp_http_client_get_status_code(client);
+  esp_http_client_cleanup(client);
+  return status_code;
+}
+
+int get_public_ip6(esp_ip6_addr_t *ip) {
+  esp_http_client_config_t config = {};
+  char output_buffer[40] = {0};
+  config.url = "http://myexternalip.com/raw";
+  esp_http_client_handle_t client = esp_http_client_init(&config);
+  esp_http_client_set_method(client, HTTP_METHOD_GET);
+
+  int code = http_get(&config, client, output_buffer);
+  if (code == 200) {
+    esp_netif_str_to_ip6(output_buffer, ip);
+  }
+  return code;
+}
+
 void load_string(nvs_handle_t handle, const char *key, char *value) {
   size_t size = 0;
   esp_err_t err = nvs_get_str(handle, key, NULL, &size);
@@ -208,25 +220,19 @@ void load_float(nvs_handle_t handle, const char *key, float *value) {
   }
 }
 
-void Geolocation::restore_data() {
-  ESP_LOGI(TAG, "Restore Data");
-  nvs_handle_t handle;
-  auto err = nvs_open(NVS_NAMESPACE, NVS_READONLY, &handle);
-  if (err != ESP_OK) {
-    ESP_LOGE(TAG, "Error (%s) opening NVS handle!\n", esp_err_to_name(err));
+esp_err_t save_string(nvs_handle_t handle, const char *key, const char *value) {
+  esp_err_t err = nvs_set_str(handle, key, value);
+  if (ESP_OK != err) {
+    ESP_LOGE(TAG, "%s: %s", key, esp_err_to_name(err));
   }
-  load_string(handle, NVS_CITY, _city);
-  load_string(handle, NVS_COUNTRY, _country);
-  load_string(handle, NVS_TZ, _tz);
-  load_string(handle, NVS_POSIX_TZ, _posix_tz);
-  load_float(handle, NVS_LONGITUDE, &_longitude);
-  load_float(handle, NVS_LATITUDE, &_latitude);
-  size_t size = sizeof(_public_ip);
-  err = nvs_get_blob(handle, NVS_IP, &_public_ip, &size);
-  if (err == ESP_OK) {
-    _ip_set = true;
-  } else {
-    ESP_LOGE(TAG, "%s: %s", NVS_IP, esp_err_to_name(err));
+  return err;
+}
+
+esp_err_t save_float(nvs_handle_t handle, const char *key, float value) {
+  int32_t *casted_value = reinterpret_cast<int32_t *>(&value);
+  esp_err_t err = nvs_set_i32(handle, key, *casted_value);
+  if (ESP_OK != err) {
+    ESP_LOGE(TAG, "%s: %s", key, esp_err_to_name(err));
   }
-  nvs_close(handle);
+  return err;
 }

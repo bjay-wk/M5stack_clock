@@ -3,7 +3,7 @@
 #include <esp_crt_bundle.h>
 #include <esp_http_client.h>
 #include <esp_log.h>
-#include <string>
+#include <sstream>
 
 #ifndef CONFIG_IP_GEOLOCATION_IO_API_KEY
 #error Please set GEOLOCATION_IO_API_KEY in menu config
@@ -25,29 +25,24 @@ IpGeolocationIoIpGeoParams::IpGeolocationIoIpGeoParams(const char *ip,
     : _ip(ip), _lang(lang), _fields(fields), _excludes(excludes),
       _include(include) {}
 
-char *IpGeolocationIoIpGeoParams::get_str_parameter() {
-  std::string formatstr = "";
+std::string IpGeolocationIoIpGeoParams::get_str_parameter() {
+  std::stringstream ss;
   if (_ip) {
-    formatstr += "&ip=";
-    formatstr += _ip;
+    ss << "&ip=" << _ip;
   }
   if (_lang) {
-    formatstr += "&lang=";
-    formatstr += _lang;
+    ss << "&lang=" << _lang;
   }
   if (_fields) {
-    formatstr += "&fields=%s";
-    formatstr += _fields;
+    ss << "&fields=%s" << _fields;
   }
   if (_excludes) {
-    formatstr += "&excludes=";
-    formatstr += _excludes;
+    ss << "&excludes=" << _excludes;
   }
   if (_include) {
-    formatstr += "&include=";
-    formatstr += _include;
+    ss << "&include=" << _include;
   }
-  return strdup(formatstr.c_str());
+  return ss.str();
 }
 
 int IpGeolocationIo::get_location(IpGeolocationIoParams *params,
@@ -60,11 +55,9 @@ int IpGeolocationIo::_https_with_hostname_params(const char *path,
                                                  IpGeolocationIoParams *params,
                                                  cJSON **output) {
   esp_http_client_config_t config = {};
-  char *output_buffer = NULL;
-  char *params_str = params->get_str_parameter();
-  const std::string url = std::string(WEB_URL) + path +
-                          std::string("?apiKey=" API_KEY) + params_str;
-  free(params_str);
+  char *output_buffer = nullptr;
+  const std::string url = WEB_URL + std::string(path) + "?apiKey=" API_KEY +
+                          params->get_str_parameter();
   config.url = url.c_str();
   config.crt_bundle_attach = esp_crt_bundle_attach;
   config.transport_type = HTTP_TRANSPORT_OVER_SSL;
@@ -72,11 +65,11 @@ int IpGeolocationIo::_https_with_hostname_params(const char *path,
   esp_http_client_set_method(client, HTTP_METHOD_GET);
   esp_http_client_set_header(client, "accept", "application/json");
   int data_len = 0;
-  char *data = NULL;
+  char *data = nullptr;
   esp_err_t err = esp_http_client_open(client, data_len);
   if (err != ESP_OK) {
     ESP_LOGE(TAG, "Failed to open HTTP connection: %s", esp_err_to_name(err));
-  } else if (data != NULL &&
+  } else if (data != nullptr &&
              esp_http_client_write(client, data, data_len) < 0) {
     ESP_LOGE(TAG, "Write failed");
   } else if (esp_http_client_fetch_headers(client) < 0) {
@@ -92,7 +85,6 @@ int IpGeolocationIo::_https_with_hostname_params(const char *path,
       total_read += read;
     } while (read > 0);
     if (output) {
-      ESP_LOGI(TAG, " tototoo %d", total_read);
       *output = cJSON_Parse(output_buffer);
     }
     free(output_buffer);

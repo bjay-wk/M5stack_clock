@@ -1,10 +1,11 @@
 #pragma once
 
 #include <cJSON.h>
+#include <string>
 
 class IpGeolocationIoParams {
 public:
-  virtual char *get_str_parameter() = 0;
+  virtual std::string get_str_parameter() = 0;
 };
 
 class IpGeolocationIoIpGeoParams : public IpGeolocationIoParams {
@@ -19,7 +20,7 @@ public:
   IpGeolocationIoIpGeoParams(const char *ip, const char *lang,
                              const char *fields, const char *excludes,
                              const char *include);
-  char *get_str_parameter() override;
+  std::string get_str_parameter() override;
 };
 
 class IpGeolocationIo {
