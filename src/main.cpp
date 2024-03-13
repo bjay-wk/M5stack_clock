@@ -4,9 +4,12 @@
 #include "sntp.h"
 #include "weather_api_generated.h"
 #include <M5Unified.h>
+#include <driver/rtc_io.h>
+#include <esp_err.h>
 #include <esp_log.h>
 #include <esp_netif.h>
 #include <esp_netif_types.h>
+#include <esp_sleep.h>
 #include <esp_wifi.h>
 #include <flatbuffers/flatbuffers.h>
 #include <http_app.h>
@@ -30,7 +33,26 @@ typedef struct UserContext {
   Timers timers;
 } UserContext;
 
-void sleep_action(void *pvParameter) {}
+void sleep_action(void *pvParameter) {
+  ESP_LOGI(TAG, "Entering sleep mode");
+
+  /*
+  const uint64_t m1 = 1ULL << GPIO_NUM_37;
+  const uint64_t m2 = 1ULL << GPIO_NUM_38;
+  const uint64_t m3 = 1ULL << GPIO_NUM_39;
+  esp_sleep_enable_ext1_wakeup(m1 | m2, ESP_EXT1_WAKEUP_ANY_HIGH);
+  ESP_ERROR_CHECK(gpio_pulldown_dis(GPIO_NUM_37));
+  ESP_ERROR_CHECK(gpio_pullup_en(GPIO_NUM_37));
+  ESP_ERROR_CHECK(gpio_pulldown_dis(GPIO_NUM_38));
+  ESP_ERROR_CHECK(gpio_pullup_en(GPIO_NUM_38));
+  ESP_ERROR_CHECK(gpio_pulldown_dis(GPIO_NUM_39));
+  ESP_ERROR_CHECK(gpio_pullup_en(GPIO_NUM_39));
+  */
+  gpio_pullup_en(GPIO_NUM_38);
+  gpio_pulldown_dis(GPIO_NUM_38);
+  esp_sleep_enable_ext0_wakeup(GPIO_NUM_38, false);
+  esp_deep_sleep_start();
+}
 
 void screen_update_cb(void *pvParameter) {
   UserContext *user_ctx = (UserContext *)pvParameter;
@@ -47,10 +69,11 @@ void start_or_restart_timer(esp_timer_handle_t timer, uint64_t timeout_us) {
 }
 
 void update_screen_off_timer(UserContext *user_ctx) {
-  start_or_restart_timer(user_ctx->timers.screen_off, 3 * U_TO_MIN);
+  start_or_restart_timer(user_ctx->timers.screen_off, 1 * U_TO_MIN);
 }
 
 void screen_off(void *pvParameter) {
+  ESP_LOGI(TAG, "Screen off");
   UserContext *user_ctx = (UserContext *)pvParameter;
   if (esp_timer_is_active(user_ctx->timers.screen_update)) {
     esp_timer_stop(user_ctx->timers.screen_update);
@@ -58,7 +81,7 @@ void screen_off(void *pvParameter) {
   Action *new_action = (Action *)calloc(sizeof(Action), 1);
   new_action->action = ScreenOff;
   xQueueSend(user_ctx->actionQueue, (void *)&new_action, (TickType_t)0);
-  start_or_restart_timer(user_ctx->timers.sleep, 5 * U_TO_MIN);
+  start_or_restart_timer(user_ctx->timers.sleep, 1 * U_TO_MIN);
 }
 
 void update_screen(UserContext *user_ctx) {
@@ -84,7 +107,6 @@ void wake_up(UserContext *user_ctx) {
   };
   openmeteo_sdk::WeatherApiResponse *output;
   OM_SDK::get_weather(&p, &output);
-  ;
 }
 
 void init_timers(UserContext *user_ctx) {
@@ -118,7 +140,6 @@ void init_timers(UserContext *user_ctx) {
 
 void action_task(void *pvParameter) {
   UserContext *user_ctx = (UserContext *)pvParameter;
-  Timers *timers = &user_ctx->timers;
   bool connected = false;
   Action *action = nullptr;
   init_timers(user_ctx);
@@ -137,7 +158,11 @@ void action_task(void *pvParameter) {
       }
       case WifiConnected: {
         connected = true;
-        user_ctx->geo->update_geoloc();
+        auto wakeup_cause = esp_sleep_get_wakeup_cause();
+        if (wakeup_cause == ESP_SLEEP_WAKEUP_EXT1 ||
+            wakeup_cause == ESP_SLEEP_WAKEUP_EXT0) {
+          user_ctx->geo->update_geoloc();
+        }
         update_screen_off_timer(user_ctx);
         wake_up(user_ctx);
         break;
@@ -233,8 +258,6 @@ extern "C" void app_main(void) {
   M5.Power.begin();
   M5.Lcd.setBrightness(50);
   M5.Lcd.setTextSize(1.5);
-  M5.Lcd.print("Power On");
-  ESP_LOGI(TAG, "POWERON");
   Geolocation geo;
   UserContext userContext = {
       .str_ip = "",
@@ -242,6 +265,16 @@ extern "C" void app_main(void) {
       .geo = &geo,
       .timers = {0, 0, 0},
   };
+  auto wakeup_cause = esp_sleep_get_wakeup_cause();
+  if (wakeup_cause == ESP_SLEEP_WAKEUP_EXT1 ||
+      wakeup_cause == ESP_SLEEP_WAKEUP_EXT0) {
+    settimezone(userContext.geo->posix_tz());
+    update_screen(&userContext);
+  } else {
+    M5.Lcd.print("Power On");
+  }
+
+  ESP_LOGI(TAG, "POWERON");
   wifi_manager_start(&userContext);
   esp_netif_set_hostname(wifi_manager_get_esp_netif_ap(), "esp-32-finger-ap");
   esp_netif_set_hostname(wifi_manager_get_esp_netif_sta(), "esp-32-finger-sta");
