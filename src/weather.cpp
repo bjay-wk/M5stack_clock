@@ -138,10 +138,8 @@ void Weather::update_weather(float latitude, float longitude) {
   openmeteo_sdk::WeatherApiResponse *output;
   OM_SDK::get_weather(&p, &output);
   copy_hourly(output);
-  ESP_LOGI(TAG, "toto");
-  // OM_SDK::get_weather(&p2, &output);
-  ESP_LOGI(TAG, "tvrvrvrvrvvrrv");
-  // copy_daily(output);
+  OM_SDK::get_weather(&p2, &output);
+  copy_daily(output);
   save();
   ESP_LOGI(TAG, "Done Updating Weather");
 }

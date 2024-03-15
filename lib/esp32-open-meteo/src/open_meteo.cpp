@@ -545,19 +545,14 @@ int https_with_hostname_params(const char *path, const OpenMeteoParams *params,
   memset(&config, 0, sizeof(config));
   char *output_buffer = NULL;
   const std::string url = std::string(WEB_URL) + path + paramsToString(params);
-  ESP_LOGI(TAG, "%s", url.c_str());
   config.url = url.c_str();
   config.crt_bundle_attach = esp_crt_bundle_attach;
   config.transport_type = HTTP_TRANSPORT_OVER_SSL;
-  ESP_LOGI(TAG, "cwevwevevva");
   esp_http_client_handle_t client = esp_http_client_init(&config);
-  ESP_LOGI(TAG, "cwevwevevva");
   esp_http_client_set_method(client, HTTP_METHOD_GET);
-  ESP_LOGI(TAG, "cwevwevevva");
   int data_len = 0;
   char *data = NULL;
   esp_err_t err = esp_http_client_open(client, data_len);
-  ESP_LOGI(TAG, "cwevwevevva");
   if (err != ESP_OK) {
     ESP_LOGE(TAG, "Failed to open HTTP connection: %s", esp_err_to_name(err));
   } else if (data != NULL &&
@@ -576,11 +571,10 @@ int https_with_hostname_params(const char *path, const OpenMeteoParams *params,
       total_read += read;
     } while (read > 0);
     if (output) {
-      ESP_LOGI(TAG, "%s", output_buffer);
       *output = (openmeteo_sdk::WeatherApiResponse *)
           openmeteo_sdk::GetSizePrefixedWeatherApiResponse(output_buffer);
     }
-    free(output_buffer);
+    // free(output_buffer);
   }
 
   esp_http_client_close(client);

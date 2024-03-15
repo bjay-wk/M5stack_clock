@@ -130,7 +130,7 @@ void update_screen(UserContext *user_ctx) {
     M5.Lcd.printf("temperature %.2f°C\n", tem_val);
     M5.Lcd.printf("humidity:%.2f %%\n", hum_val);
   }
-  /*
+
   if (*user_ctx->str_ip) {
     user_ctx->w->update_weather(user_ctx->geo->latitude(),
                                 user_ctx->geo->longitude());
@@ -143,7 +143,6 @@ void update_screen(UserContext *user_ctx) {
         user_ctx->w->forecast24.precipitation_probability[0],
         user_ctx->w->forecast24.temperature_2m[0]);
   }
-  */
 }
 
 void wake_up(UserContext *user_ctx) {
@@ -206,6 +205,7 @@ void action_task(void *pvParameter) {
           user_ctx->geo->update_geoloc();
         }
         wake_up(user_ctx);
+        update_screen(user_ctx);
         update_screen_off_timer(user_ctx);
         break;
       }
@@ -337,17 +337,15 @@ extern "C" void app_main(void) {
   M5.Lcd.setBrightness(50);
   M5.Lcd.setTextSize(1.5);
   Geolocation geo;
-  PM25 pm25(UART_NUM_2);
-  Weather w;
   UserContext userContext = {
       .str_ip = "",
       .actionQueue = xQueueCreate(10, sizeof(struct Action *)),
       .geo = &geo,
       .timers = {0, 0, 0},
       .light_sensor = bh1750,
-      .pm25 = &pm25,
+      .pm25 = new PM25(UART_NUM_2),
       .sht3x = sht3x,
-      .w = &w,
+      .w = new Weather(),
   };
   auto wakeup_cause = esp_sleep_get_wakeup_cause();
   if (wakeup_cause == ESP_SLEEP_WAKEUP_EXT1 ||
@@ -378,7 +376,7 @@ extern "C" void app_main(void) {
   wifi_manager_set_callback(WM_MESSAGE_CODE_COUNT, NULL);
   http_app_set_handler_hook(HTTP_GET, &wifi_handler);
 
-  xTaskCreate(&action_task, "action_task", 16096, &userContext, 5, nullptr);
+  xTaskCreate(&action_task, "action_task", 8192, &userContext, 5, nullptr);
 
   while (1) {
     M5.update();
