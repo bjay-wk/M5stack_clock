@@ -45,7 +45,7 @@ int Geolocation::update_geoloc() {
   if (response_code == 200) {
     if (_ip_set && !memcmp(&ip, &_public_ip, sizeof(ip))) {
       ESP_LOGI(TAG, "Public ip did not change, canceling update");
-      return 200;
+      // return 200;
     }
     memcpy(&_public_ip, &ip, sizeof(ip));
     _ip_set = true;
@@ -65,7 +65,7 @@ int Geolocation::update_geoloc() {
     cJSON *timezone = cJSON_GetObjectItemCaseSensitive(data, "time_zone");
     tmp_str = cJSON_GetObjectItemCaseSensitive(timezone, "name")->valuestring;
     strcpy(_tz, tmp_str ? tmp_str : "");
-
+    ESP_LOGI(TAG, "timezone: %s", _tz);
     tmp_str = cJSON_GetObjectItemCaseSensitive(data, "latitude")->valuestring;
     _latitude = tmp_str ? std::stof(tmp_str) : 0.0;
     tmp_str = cJSON_GetObjectItemCaseSensitive(data, "longitude")->valuestring;
@@ -98,6 +98,7 @@ int Geolocation::download_posix_tz() {
       } else {
         strcpy(_posix_tz, _tz);
       }
+      ESP_LOGI(TAG, "posix timezone: %s", _posix_tz);
       cJSON_Delete(output);
     }
   }

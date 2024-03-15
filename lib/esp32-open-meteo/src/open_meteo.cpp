@@ -146,59 +146,59 @@ const char *EnumNamesWeatherCode(WeatherCode code) {
   case Clear_sky:
     return "Clear sky";
   case mainly_clear:
-    return "mainly_clear";
+    return "Mainly clear";
   case partly_cloudy:
-    return "partly_cloudy";
+    return "Partly_cloudy";
   case overcast:
-    return "overcast";
+    return "Overcast";
   case fog:
-    return "fog";
+    return "Fog";
   case depositing_rime_fog:
-    return "depositing_rime_fog";
+    return "Depositing rime fog";
   case drizzle_light:
-    return "drizzle_light";
+    return "Light drizzle";
   case drizzle_moderate:
-    return "drizzle_moderate";
+    return "Moderate drizzle";
   case drizzle_dense:
-    return "drizzle_dense";
+    return "Dense drizzle";
   case freezing_drizzle_light:
-    return "freezing_drizzle_light";
+    return "Light freezing drizzle";
   case Freezing_drizzle_dense:
-    return "Freezing_drizzle_dense";
+    return "Dense freezing drizzle";
   case ain_slight:
-    return "ain_slight";
+    return "slight rain";
   case rain_moderate:
-    return "rain_moderate";
+    return "Moderate rain";
   case rain_heavy_intensity:
-    return "rain_heavy_intensity";
+    return "Heavy rain";
   case freezing_rain_light:
-    return "freezing_rain_light";
+    return "Light freezing rain";
   case freezing_rain_heavy:
-    return "freezing_rain_heavy";
+    return "Heavy freezing rain";
   case snow_fall_slight:
-    return "snow_fall_slight";
+    return "slight snow fall";
   case snow_fall_moderate:
-    return "snow_fall_moderate";
+    return "Moderate snow fall";
   case snow_fall_heavy:
-    return "snow_fall_heavy";
+    return "Heavy snow fall";
   case snow_grains:
-    return "snow_grains";
+    return "snow grains";
   case rain_showers_Slight:
-    return "rain_showers_Slight";
+    return "Slight rain showers";
   case rain_showers_moderate:
-    return "rain_showers_moderate";
+    return "Moderate rain showers";
   case rain_showers_violent:
-    return "rain_showers_violent";
+    return "Violent rain showers";
   case snow_showers_slight:
-    return "snow_showers_slight";
+    return "slight snow showers";
   case snow_showersheavy:
-    return "snow_showersheavy";
+    return "Heavy snow showers";
   case thunderstorm_slight_moderate:
-    return "thunderstorm_slight_moderate";
+    return "slight or moderate thunderstorm";
   case thunderstorm_slight_hail:
-    return "thunderstorm_slight_hail";
+    return "slight hail thunderstorm";
   case thunderstorm_heavy_hail:
-    return "thunderstorm_heavy_hail";
+    return "Heavy hail thunderstorm";
   default:
     break;
   }

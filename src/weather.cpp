@@ -96,12 +96,12 @@ void Weather::copy_daily(const openmeteo_sdk::WeatherApiResponse *output) {
 
 void Weather::update_weather(float latitude, float longitude) {
   ESP_LOGI(TAG, "Updating Weather");
-  time_t current;
-  time(&current);
-  if (current < expiry_time) {
+  time_t now;
+  time(&now);
+  if (now < expiry_time) {
     return;
   }
-  struct tm *tm = localtime(&current);
+  struct tm *tm = localtime(&now);
   tm->tm_mday += 1;
   tm->tm_hour = 0;
   tm->tm_min = 0;
