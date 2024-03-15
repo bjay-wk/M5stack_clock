@@ -7,7 +7,7 @@
 
 #define TAG "OM_SDK"
 #define PAST_DAY_MAX 92
-#define FORCAST_DAY_MAX 7
+#define FORCAST_DAY_MAX 16
 #define WEB_URL "https://api.open-meteo.com"
 #define FORECAST "/v1/forecast"
 #define MAX_HTTP_OUTPUT_BUFFER_CALLOC 3 * 1024
@@ -431,7 +431,7 @@ std::string add(time_t value, const char *name, const char *format) {
 std::string add(int8_t value, const char *name) {
   std::stringstream ss;
   if (value > 0)
-    ss << "&" << name << "=" << value;
+    ss << "&" << name << "=" << (int)value;
   return ss.str();
 }
 
@@ -500,7 +500,7 @@ std::string paramsToString(const OpenMeteoParams *p) {
     ss << "&timezone=" << p->timezone;
   }
 
-  ss << add(p->past_days, "past_days")
+  ss << add(p->past_days, "past_days") << add(p->forecast_days, "forecast_days")
      << add(p->forecast_hours, "forecast_hours")
      << add(p->forecast_minutely_15, "forecast_minutely_15")
      << add(p->past_hours, "past_hours")
@@ -545,6 +545,7 @@ int https_with_hostname_params(const char *path, const OpenMeteoParams *params,
   memset(&config, 0, sizeof(config));
   char *output_buffer = NULL;
   const std::string url = std::string(WEB_URL) + path + paramsToString(params);
+  ESP_LOGI(TAG, "%s", url.c_str());
   config.url = url.c_str();
   config.crt_bundle_attach = esp_crt_bundle_attach;
   config.transport_type = HTTP_TRANSPORT_OVER_SSL;
@@ -574,7 +575,7 @@ int https_with_hostname_params(const char *path, const OpenMeteoParams *params,
       *output = (openmeteo_sdk::WeatherApiResponse *)
           openmeteo_sdk::GetSizePrefixedWeatherApiResponse(output_buffer);
     }
-    // free(output_buffer);
+    free(output_buffer);
   }
 
   esp_http_client_close(client);

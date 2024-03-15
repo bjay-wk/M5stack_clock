@@ -18,12 +18,12 @@ void Weather::copy_hourly(const openmeteo_sdk::WeatherApiResponse *output) {
   for (unsigned int i = 0; i < hourly_out->size(); i++) {
     auto data = hourly_out->Get(i);
     if (data->variable() == openmeteo_sdk::Variable_precipitation_probability) {
-
       for (int i = 0; i < data->values()->size(); ++i) {
         forecast24.precipitation_probability[i] = data->values()->Get(i);
       }
     } else if (data->variable() == openmeteo_sdk::Variable_temperature) {
       for (int i = 0; i < data->values()->size(); ++i) {
+        ESP_LOGI(TAG, "Temp: %f", data->values()->Get(i));
         forecast24.temperature_2m[i] = data->values()->Get(i);
       }
     } else if (data->variable() == openmeteo_sdk::Variable_weather_code) {
@@ -99,7 +99,7 @@ void Weather::update_weather(float latitude, float longitude) {
   time_t current;
   time(&current);
   if (current < expiry_time) {
-    // return;
+    return;
   }
   struct tm *tm = localtime(&current);
   tm->tm_hour += 1;
