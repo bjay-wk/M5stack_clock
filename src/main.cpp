@@ -106,6 +106,7 @@ void screen_off(void *pvParameter) {
 void update_screen(UserContext *user_ctx) {
   stop_sleep_timer(user_ctx);
   M5.Lcd.wakeup();
+  M5.Lcd.setTextSize(2);
   float tem_val, hum_val;
   float lux = 0;
   bh1750_get(user_ctx->light_sensor, &lux);
@@ -127,8 +128,8 @@ void update_screen(UserContext *user_ctx) {
     M5.Lcd.printf("pm25: %d\n", data.pm25_standard);
   }
   if (sht3x_get_humiture(user_ctx->sht3x, &tem_val, &hum_val) == 0) {
-    M5.Lcd.printf("temperature %.2f°C\n", tem_val);
-    M5.Lcd.printf("humidity:%.2f %%\n", hum_val);
+    M5.Lcd.printf("temperature %.0fC\n", tem_val);
+    M5.Lcd.printf("humidity:%.0f%%\n", hum_val);
   }
 
   if (*user_ctx->str_ip) {
@@ -138,10 +139,9 @@ void update_screen(UserContext *user_ctx) {
     localtime_r(&now, &tm);
     user_ctx->w->update_weather(user_ctx->geo->latitude(),
                                 user_ctx->geo->longitude());
-    ESP_LOGI(TAG, "dd ; %d", tm.tm_hour);
-    M5.Lcd.printf("\nWeather:%s\nUV %.2f\n"
-                  "precipitation:%.2f %%\n"
-                  "outside temperature %.2f°C\n",
+    M5.Lcd.printf("\n%s\nUV: %.1f\n"
+                  "precipitation:%.0f%%\n"
+                  "outside: %.0fC\n",
                   OM_SDK::EnumNamesWeatherCode(
                       user_ctx->w->forecast24.weather_code[tm.tm_hour]),
                   user_ctx->w->forecast24.uv_index[tm.tm_hour],

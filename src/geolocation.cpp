@@ -7,22 +7,20 @@
 #include <nvs.h>
 #include <string>
 
-#define GITHUB_POSIX_TZ_DB                                                     \
-  "https://raw.githubusercontent.com/nayarsystems/posix_tz_db/master/"         \
-  "zones.json"
-
 #define TAG "geolocation"
 #define ARRAY_LENGTH(array) (sizeof((array)) / sizeof((array)[0]))
 #define MAX_HTTP_OUTPUT_BUFFER_CALLOC 2 * 1024
 
 #define NVS_NAMESPACE "GEO"
 #define NVS_TZ "TZ"
-#define NVS_POSIX_TZ "TZ_POSIX"
 #define NVS_CITY "CITY"
 #define NVS_COUNTRY "COUNTRY"
 #define NVS_LATITUDE "LAT"
 #define NVS_LONGITUDE "LONG"
 #define NVS_IP "IP"
+
+extern const uint8_t zone_json_start[] asm("_binary_zones_json_start");
+extern const uint8_t zone_json_end[] asm("_binary_zones_json_end");
 
 int http_get(esp_http_client_config_t *config, esp_http_client_handle_t client,
              char *output_buffer);
@@ -45,7 +43,8 @@ int Geolocation::update_geoloc() {
   if (response_code == 200) {
     if (_ip_set && !memcmp(&ip, &_public_ip, sizeof(ip))) {
       ESP_LOGI(TAG, "Public ip did not change, canceling update");
-      // return 200;
+      download_posix_tz();
+      return 200;
     }
     memcpy(&_public_ip, &ip, sizeof(ip));
     _ip_set = true;
@@ -79,31 +78,19 @@ int Geolocation::update_geoloc() {
 }
 
 int Geolocation::download_posix_tz() {
-  esp_http_client_config_t config = {};
-  char *output_buffer = (char *)calloc(MAX_HTTP_OUTPUT_BUFFER_CALLOC, 1);
-  config.url = GITHUB_POSIX_TZ_DB;
-  config.crt_bundle_attach = esp_crt_bundle_attach;
-  config.transport_type = HTTP_TRANSPORT_OVER_SSL;
-  esp_http_client_handle_t client = esp_http_client_init(&config);
-  esp_http_client_set_method(client, HTTP_METHOD_GET);
-  esp_http_client_set_header(client, "accept", "application/json");
-
-  int code = http_get(&config, client, output_buffer);
-  if (code == 200) {
-    cJSON *output = cJSON_Parse(output_buffer);
-    if (output) {
-      auto tz_long_json = cJSON_GetObjectItemCaseSensitive(output, _tz);
-      if (tz_long_json && tz_long_json->valuestring) {
-        strcpy(_posix_tz, tz_long_json->valuestring);
-      } else {
-        strcpy(_posix_tz, _tz);
-      }
-      ESP_LOGI(TAG, "posix timezone: %s", _posix_tz);
-      cJSON_Delete(output);
+  cJSON *output = cJSON_ParseWithLength((char *)zone_json_start,
+                                        zone_json_end - zone_json_start);
+  if (output) {
+    auto tz_long_json = cJSON_GetObjectItemCaseSensitive(output, _tz);
+    if (tz_long_json && tz_long_json->valuestring) {
+      strcpy(_posix_tz, tz_long_json->valuestring);
+    } else {
+      strcpy(_posix_tz, _tz);
     }
+    ESP_LOGI(TAG, "posix timezone: %s", _posix_tz);
+    cJSON_Delete(output);
   }
-  free(output_buffer);
-  return code;
+  return 200;
 }
 
 void Geolocation::save_data() {
@@ -119,7 +106,6 @@ void Geolocation::save_data() {
   save_string(handle, NVS_CITY, _city);
   save_string(handle, NVS_COUNTRY, _country);
   save_string(handle, NVS_TZ, _tz);
-  save_string(handle, NVS_POSIX_TZ, _posix_tz);
   save_float(handle, NVS_LONGITUDE, _longitude);
   save_float(handle, NVS_LATITUDE, _latitude);
   err = nvs_set_blob(handle, NVS_IP, &_public_ip, sizeof(_public_ip));
@@ -144,7 +130,6 @@ void Geolocation::restore_data() {
   load_string(handle, NVS_CITY, _city);
   load_string(handle, NVS_COUNTRY, _country);
   load_string(handle, NVS_TZ, _tz);
-  load_string(handle, NVS_POSIX_TZ, _posix_tz);
   load_float(handle, NVS_LONGITUDE, &_longitude);
   load_float(handle, NVS_LATITUDE, &_latitude);
   size_t size = sizeof(_public_ip);
@@ -155,6 +140,7 @@ void Geolocation::restore_data() {
     ESP_LOGE(TAG, "%s: %s", NVS_IP, esp_err_to_name(err));
   }
   nvs_close(handle);
+  download_posix_tz();
 }
 
 int http_get(esp_http_client_config_t *config, esp_http_client_handle_t client,
