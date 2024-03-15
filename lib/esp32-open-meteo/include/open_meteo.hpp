@@ -60,7 +60,7 @@ typedef enum TimeParam {
   temperature_2m_max,
   temperature_2m_min,
   uv_index_clear_sky_max,
-  uv_index_max,
+  uv_index_max, // Not working
   vapour_pressure_deficit,
   visibility,
   weather_code,
@@ -76,8 +76,42 @@ typedef enum TimeParam {
   wind_speed_120m,
   wind_speed_180m,
   wind_speed_80m,
+  uv_index,
   max_params,
 } TimeParam;
+
+typedef enum WeatherCode : int8_t {
+  Clear_sky = 0,
+  mainly_clear = 1,
+  partly_cloudy = 2,
+  overcast = 3,
+  fog = 45,
+  depositing_rime_fog = 48,
+  drizzle_light = 51,
+  drizzle_moderate = 53,
+  drizzle_dense = 55,
+  freezing_drizzle_light = 56,
+  Freezing_drizzle_dense = 57,
+  ain_slight = 61,
+  rain_moderate = 63,
+  rain_heavy_intensity = 65,
+  freezing_rain_light = 66,
+  freezing_rain_heavy = 67,
+  snow_fall_slight = 71,
+  snow_fall_moderate = 73,
+  snow_fall_heavy = 75,
+  snow_grains = 77,
+  rain_showers_Slight = 80,
+  rain_showers_moderate = 81,
+  rain_showers_violent = 82,
+  snow_showers_slight = 85,
+  snow_showersheavy = 86,
+  thunderstorm_slight_moderate = 95,
+  thunderstorm_slight_hail = 96,
+  thunderstorm_heavy_hail = 99
+} WeatherCode;
+
+const char *EnumNamesWeatherCode(WeatherCode code);
 
 const char *const *EnumNamesTimeParams();
 

@@ -1,9 +1,9 @@
 #include "bh1750.h"
 #include "geolocation.hpp"
 #include "http_manager.h"
-#include "open_meteo.hpp"
 #include "pm25.hpp"
 #include "sntp.h"
+#include "weather.hpp"
 #include "weather_api_generated.h"
 #include <M5Unified.h>
 #include <driver/rtc_io.h>
@@ -43,6 +43,7 @@ typedef struct UserContext {
   bh1750_handle_t light_sensor;
   PM25 *pm25;
   sht3x_handle_t sht3x;
+  Weather *w;
 } UserContext;
 
 bool bh1750_get(bh1750_handle_t bh1750, float *output);
@@ -74,6 +75,10 @@ void screen_update_cb(void *pvParameter) {
   new_action->action = UpdateScreen;
   xQueueSend(user_ctx->actionQueue, (void *)&new_action, 100);
 }
+void stop_sleep_timer(UserContext *user_ctx) {
+  if (esp_timer_is_active(user_ctx->timers.sleep))
+    ESP_ERROR_CHECK(esp_timer_stop(user_ctx->timers.sleep));
+}
 
 void start_or_restart_timer(esp_timer_handle_t timer, uint64_t timeout_us) {
   if (esp_timer_is_active(timer))
@@ -99,6 +104,7 @@ void screen_off(void *pvParameter) {
 }
 
 void update_screen(UserContext *user_ctx) {
+  stop_sleep_timer(user_ctx);
   M5.Lcd.wakeup();
   float tem_val, hum_val;
   float lux = 0;
@@ -124,20 +130,25 @@ void update_screen(UserContext *user_ctx) {
     M5.Lcd.printf("temperature %.2f°C\n", tem_val);
     M5.Lcd.printf("humidity:%.2f %%\n", hum_val);
   }
+  /*
+  if (*user_ctx->str_ip) {
+    user_ctx->w->update_weather(user_ctx->geo->latitude(),
+                                user_ctx->geo->longitude());
+    M5.Lcd.printf(
+        "\nWeather:%s\nUV %.2f\n"
+        "precipitation:%.2f %%\n"
+        "outside temperature %.2f°C\n",
+        OM_SDK::EnumNamesWeatherCode(user_ctx->w->forecast24.weather_code[0]),
+        user_ctx->w->forecast24.uv_index[0],
+        user_ctx->w->forecast24.precipitation_probability[0],
+        user_ctx->w->forecast24.temperature_2m[0]);
+  }
+  */
 }
 
 void wake_up(UserContext *user_ctx) {
   check_and_update_ntp_time();
   settimezone(user_ctx->geo->posix_tz());
-  OM_SDK::TimeParam daily[] = {OM_SDK::temperature_2m, OM_SDK::max_params};
-  OM_SDK::OpenMeteoParams p{
-      .latitude = user_ctx->geo->latitude(),
-      .longitude = user_ctx->geo->longitude(),
-      .current = daily,
-      .forecast_days = 4,
-  };
-  openmeteo_sdk::WeatherApiResponse *output;
-  OM_SDK::get_weather(&p, &output);
 }
 
 void init_timers(UserContext *user_ctx) {
@@ -190,12 +201,12 @@ void action_task(void *pvParameter) {
       case WifiConnected: {
         connected = true;
         auto wakeup_cause = esp_sleep_get_wakeup_cause();
-        if (wakeup_cause == ESP_SLEEP_WAKEUP_EXT1 ||
-            wakeup_cause == ESP_SLEEP_WAKEUP_EXT0) {
+        if (wakeup_cause != ESP_SLEEP_WAKEUP_EXT1 &&
+            wakeup_cause != ESP_SLEEP_WAKEUP_EXT0) {
           user_ctx->geo->update_geoloc();
         }
-        update_screen_off_timer(user_ctx);
         wake_up(user_ctx);
+        update_screen_off_timer(user_ctx);
         break;
       }
       case WifiDisconnected:
@@ -207,6 +218,7 @@ void action_task(void *pvParameter) {
         ESP_LOGI(TAG, "Wifi Disconnected");
         M5.Lcd.fillScreen(BLACK);
         update_screen_off_timer(user_ctx);
+        stop_sleep_timer(user_ctx);
         break;
       case ApStarted:
         M5.Lcd.wakeup();
@@ -298,12 +310,10 @@ bool bh1750_get(bh1750_handle_t bh1750, float *output) {
   vTaskDelay(30 / portTICK_RATE_MS);
   auto ret = bh1750_get_data(bh1750, output);
   bh1750_power_down(bh1750);
-  if (ret == ESP_OK) {
-    ESP_LOGI(TAG, "bh1750 val(one time mode): %f", *output);
-    return true;
+  if (ret != ESP_OK) {
+    ESP_LOGE(TAG, "No ack, sensor not connected...\n");
   }
-  ESP_LOGE(TAG, "No ack, sensor not connected...\n");
-  return false;
+  return ret == ESP_OK;
 }
 
 extern "C" void app_main(void) {
@@ -328,6 +338,7 @@ extern "C" void app_main(void) {
   M5.Lcd.setTextSize(1.5);
   Geolocation geo;
   PM25 pm25(UART_NUM_2);
+  Weather w;
   UserContext userContext = {
       .str_ip = "",
       .actionQueue = xQueueCreate(10, sizeof(struct Action *)),
@@ -336,6 +347,7 @@ extern "C" void app_main(void) {
       .light_sensor = bh1750,
       .pm25 = &pm25,
       .sht3x = sht3x,
+      .w = &w,
   };
   auto wakeup_cause = esp_sleep_get_wakeup_cause();
   if (wakeup_cause == ESP_SLEEP_WAKEUP_EXT1 ||
@@ -366,7 +378,7 @@ extern "C" void app_main(void) {
   wifi_manager_set_callback(WM_MESSAGE_CODE_COUNT, NULL);
   http_app_set_handler_hook(HTTP_GET, &wifi_handler);
 
-  xTaskCreate(&action_task, "action_task", 8192, &userContext, 5, nullptr);
+  xTaskCreate(&action_task, "action_task", 16096, &userContext, 5, nullptr);
 
   while (1) {
     M5.update();

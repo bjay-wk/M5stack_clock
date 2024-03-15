@@ -10,7 +10,7 @@
 #define FORCAST_DAY_MAX 7
 #define WEB_URL "https://api.open-meteo.com"
 #define FORECAST "/v1/forecast"
-#define MAX_HTTP_OUTPUT_BUFFER_CALLOC 26 * 1024
+#define MAX_HTTP_OUTPUT_BUFFER_CALLOC 3 * 1024
 #define ARRAY_LENGTH(array) (sizeof((array)) / sizeof((array)[0]))
 
 namespace OM_SDK {
@@ -90,6 +90,7 @@ const char *const *EnumNamesTimeParams() {
       "wind_speed_120m ",
       "wind_speed_180m",
       "wind_speed_80m",
+      "uv_index",
       "max_params",
       nullptr,
   };
@@ -138,6 +139,71 @@ const char *const *EnumNamesCellSelection() {
       "undefined_selection", "land", "sea", "nearest", nullptr,
   };
   return names;
+}
+
+const char *EnumNamesWeatherCode(WeatherCode code) {
+  switch (code) {
+  case Clear_sky:
+    return "Clear sky";
+  case mainly_clear:
+    return "mainly_clear";
+  case partly_cloudy:
+    return "partly_cloudy";
+  case overcast:
+    return "overcast";
+  case fog:
+    return "fog";
+  case depositing_rime_fog:
+    return "depositing_rime_fog";
+  case drizzle_light:
+    return "drizzle_light";
+  case drizzle_moderate:
+    return "drizzle_moderate";
+  case drizzle_dense:
+    return "drizzle_dense";
+  case freezing_drizzle_light:
+    return "freezing_drizzle_light";
+  case Freezing_drizzle_dense:
+    return "Freezing_drizzle_dense";
+  case ain_slight:
+    return "ain_slight";
+  case rain_moderate:
+    return "rain_moderate";
+  case rain_heavy_intensity:
+    return "rain_heavy_intensity";
+  case freezing_rain_light:
+    return "freezing_rain_light";
+  case freezing_rain_heavy:
+    return "freezing_rain_heavy";
+  case snow_fall_slight:
+    return "snow_fall_slight";
+  case snow_fall_moderate:
+    return "snow_fall_moderate";
+  case snow_fall_heavy:
+    return "snow_fall_heavy";
+  case snow_grains:
+    return "snow_grains";
+  case rain_showers_Slight:
+    return "rain_showers_Slight";
+  case rain_showers_moderate:
+    return "rain_showers_moderate";
+  case rain_showers_violent:
+    return "rain_showers_violent";
+  case snow_showers_slight:
+    return "snow_showers_slight";
+  case snow_showersheavy:
+    return "snow_showersheavy";
+  case thunderstorm_slight_moderate:
+    return "thunderstorm_slight_moderate";
+  case thunderstorm_slight_hail:
+    return "thunderstorm_slight_hail";
+  case thunderstorm_heavy_hail:
+    return "thunderstorm_heavy_hail";
+  default:
+    break;
+  }
+  ESP_LOGI(TAG, "unknown case :%i", code);
+  return "unknown";
 }
 
 const TimeParam currentFilter[] = {
@@ -244,6 +310,7 @@ const TimeParam hourlyFilter[] = {
     soil_moisture_9_to_27cm,
     soil_moisture_27_to_81cm,
     is_day,
+    uv_index,
 };
 
 const TimeParam minutely_15Filter[]{
@@ -475,16 +542,22 @@ int get_weather(OpenMeteoParams *params,
 int https_with_hostname_params(const char *path, const OpenMeteoParams *params,
                                openmeteo_sdk::WeatherApiResponse **output) {
   esp_http_client_config_t config = {};
+  memset(&config, 0, sizeof(config));
   char *output_buffer = NULL;
   const std::string url = std::string(WEB_URL) + path + paramsToString(params);
+  ESP_LOGI(TAG, "%s", url.c_str());
   config.url = url.c_str();
   config.crt_bundle_attach = esp_crt_bundle_attach;
   config.transport_type = HTTP_TRANSPORT_OVER_SSL;
+  ESP_LOGI(TAG, "cwevwevevva");
   esp_http_client_handle_t client = esp_http_client_init(&config);
+  ESP_LOGI(TAG, "cwevwevevva");
   esp_http_client_set_method(client, HTTP_METHOD_GET);
+  ESP_LOGI(TAG, "cwevwevevva");
   int data_len = 0;
   char *data = NULL;
   esp_err_t err = esp_http_client_open(client, data_len);
+  ESP_LOGI(TAG, "cwevwevevva");
   if (err != ESP_OK) {
     ESP_LOGE(TAG, "Failed to open HTTP connection: %s", esp_err_to_name(err));
   } else if (data != NULL &&
@@ -503,6 +576,7 @@ int https_with_hostname_params(const char *path, const OpenMeteoParams *params,
       total_read += read;
     } while (read > 0);
     if (output) {
+      ESP_LOGI(TAG, "%s", output_buffer);
       *output = (openmeteo_sdk::WeatherApiResponse *)
           openmeteo_sdk::GetSizePrefixedWeatherApiResponse(output_buffer);
     }
