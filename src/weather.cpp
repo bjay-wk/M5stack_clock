@@ -102,7 +102,9 @@ void Weather::update_weather(float latitude, float longitude) {
     return;
   }
   struct tm *tm = localtime(&current);
-  tm->tm_hour += 1;
+  tm->tm_mday += 1;
+  tm->tm_hour = 0;
+  tm->tm_min = 0;
   expiry_time = mktime(tm);
 
   OM_SDK::TimeParam hourly[] = {

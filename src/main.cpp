@@ -132,16 +132,20 @@ void update_screen(UserContext *user_ctx) {
   }
 
   if (*user_ctx->str_ip) {
+    time_t current;
+    time(&current);
+    struct tm *tm = localtime(&current);
     user_ctx->w->update_weather(user_ctx->geo->latitude(),
                                 user_ctx->geo->longitude());
     M5.Lcd.printf(
         "\nWeather:%s\nUV %.2f\n"
         "precipitation:%.2f %%\n"
         "outside temperature %.2f°C\n",
-        OM_SDK::EnumNamesWeatherCode(user_ctx->w->forecast24.weather_code[0]),
-        user_ctx->w->forecast24.uv_index[0],
-        user_ctx->w->forecast24.precipitation_probability[0],
-        user_ctx->w->forecast24.temperature_2m[0]);
+        OM_SDK::EnumNamesWeatherCode(
+            user_ctx->w->forecast24.weather_code[tm->tm_hour]),
+        user_ctx->w->forecast24.uv_index[tm->tm_hour],
+        user_ctx->w->forecast24.precipitation_probability[tm->tm_hour],
+        user_ctx->w->forecast24.temperature_2m[tm->tm_hour]);
   }
 }
 
