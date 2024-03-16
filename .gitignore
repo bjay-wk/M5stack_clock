@@ -36,5 +36,3 @@
 .vscode
 sdkconfig.*
 managed_components
-build_flatbuffers
-*weather_api_generated.h
