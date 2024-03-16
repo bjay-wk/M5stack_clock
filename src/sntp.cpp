@@ -15,11 +15,14 @@ void settimezone(const char *timezone) {
   tzset();
 }
 
-void get_time(const char *format, char *strftime_buf, size_t maxsize) {
+void get_time(const char *format, char *strftime_buf, size_t maxsize,
+              int add_day) {
   time_t now;
   struct tm timeinfo;
   time(&now);
   localtime_r(&now, &timeinfo);
+  timeinfo.tm_mday += add_day;
+  timeinfo.tm_wday += add_day;
   strftime(strftime_buf, maxsize, format, &timeinfo);
 }
 

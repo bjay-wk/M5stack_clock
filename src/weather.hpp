@@ -11,6 +11,13 @@ typedef struct Forecast24 {
   float temperature_2m[24] = {0};
 } Forecast24;
 
+typedef struct ForecastTmr {
+  OM_SDK::WeatherCode weather_code[2];
+  float uv_index[2] = {0};
+  float precipitation_probability[2] = {0};
+  float temperature_2m[2] = {0};
+} ForecastTmr;
+
 typedef struct Forecast7 {
   float temperature_2m_max[7] = {0.0};
   float temperature_2m_min[7] = {0.0};
@@ -25,6 +32,7 @@ class Weather {
 public:
   Forecast24 forecast24;
   Forecast7 forecast7;
+  ForecastTmr forecast_tmr;
   Weather();
   void update_weather(float latitude, float longitude);
 

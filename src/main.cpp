@@ -27,7 +27,7 @@
 #define U_TO_SEC 1000000
 #define U_TO_MIN U_TO_SEC * 60
 const char TAG[] = "main";
-
+#define ARRAY_SIZE(array) (sizeof(array) / sizeof((array)[0]))
 typedef struct Timers {
   esp_timer_handle_t screen_off;
   esp_timer_handle_t sleep;
@@ -44,7 +44,33 @@ typedef struct UserContext {
   PM25 *pm25;
   sht3x_handle_t sht3x;
   Weather *w;
+
+  int _page;
+  bool screen_on;
 } UserContext;
+
+typedef void (*ScreenUpdateFunc)(UserContext *user_ctx);
+
+void page_main(UserContext *user_ctx);
+void page_today(UserContext *user_ctx);
+void page_tomorrow(UserContext *user_ctx);
+void page_d2(UserContext *user_ctx);
+void page_d3(UserContext *user_ctx);
+void page_d4(UserContext *user_ctx);
+
+ScreenUpdateFunc screen_update_func[] = {
+    page_main, page_today, page_tomorrow, page_d2, page_d3, page_d4,
+};
+
+void change_page(int page, UserContext *user_ctx) {
+  user_ctx->_page += page;
+  if (user_ctx->_page < 0) {
+    user_ctx->_page = (int)(ARRAY_SIZE(screen_update_func)) - 1;
+  }
+  if (user_ctx->_page >= ARRAY_SIZE(screen_update_func)) {
+    user_ctx->_page = 0;
+  }
+}
 
 bool bh1750_get(bh1750_handle_t bh1750, float *output);
 
@@ -94,6 +120,7 @@ void update_screen_off_timer(UserContext *user_ctx) {
 void screen_off(void *pvParameter) {
   ESP_LOGI(TAG, "Screen off");
   UserContext *user_ctx = (UserContext *)pvParameter;
+  user_ctx->screen_on = false;
   if (esp_timer_is_active(user_ctx->timers.screen_update)) {
     esp_timer_stop(user_ctx->timers.screen_update);
   }
@@ -105,9 +132,8 @@ void screen_off(void *pvParameter) {
 
 void update_screen(UserContext *user_ctx) {
   stop_sleep_timer(user_ctx);
+  user_ctx->screen_on = true;
   M5.Lcd.wakeup();
-  M5.Lcd.setTextSize(2);
-  float tem_val, hum_val;
   float lux = 0;
   bh1750_get(user_ctx->light_sensor, &lux);
   if (lux > 5000)
@@ -116,20 +142,29 @@ void update_screen(UserContext *user_ctx) {
   if (lux < 1)
     lux = 1;
   M5.Lcd.setBrightness(lux);
+  screen_update_func[user_ctx->_page](user_ctx);
+}
+
+void page_main(UserContext *user_ctx) {
+  ESP_LOGI(TAG, "Show Main page");
+  M5.Lcd.setTextSize(3);
+  float tem_val, hum_val;
   M5.Lcd.fillScreen(BLACK);
   M5.Lcd.setCursor(0, 0);
-  char time_buf[6] = {0};
-  char format[] = "%H:%M";
-  get_time(format, time_buf, sizeof(time_buf));
+  char time_buf[20] = {0};
+  char format[] = "%a %D\n%H:%M";
+  get_time(format, time_buf, sizeof(time_buf), 0);
   ESP_LOGI(TAG, "%s", time_buf);
   M5.Lcd.printf("%s\n", time_buf);
   PMSAQIdata data;
+  M5.Lcd.setTextSize(2);
   if (user_ctx->pm25->get(&data)) {
     M5.Lcd.printf("pm25: %d\n", data.pm25_standard);
   }
   if (sht3x_get_humiture(user_ctx->sht3x, &tem_val, &hum_val) == 0) {
-    M5.Lcd.printf("temperature %.0fC\n", tem_val);
-    M5.Lcd.printf("humidity:%.0f%%\n", hum_val);
+    M5.Lcd.printf("temp: %02.0fC\n"
+                  "hum:  %02.0f%%\n",
+                  tem_val, hum_val);
   }
 
   if (*user_ctx->str_ip) {
@@ -139,9 +174,10 @@ void update_screen(UserContext *user_ctx) {
     localtime_r(&now, &tm);
     user_ctx->w->update_weather(user_ctx->geo->latitude(),
                                 user_ctx->geo->longitude());
-    M5.Lcd.printf("\n%s\nUV: %.1f\n"
-                  "precipitation:%.0f%%\n"
-                  "outside: %.0fC\n",
+    M5.Lcd.printf("\n%s\n"
+                  "UV:   %.1f\n"
+                  "rain: %.0f%%\n"
+                  "temp: %.0fC\n",
                   OM_SDK::EnumNamesWeatherCode(
                       user_ctx->w->forecast24.weather_code[tm.tm_hour]),
                   user_ctx->w->forecast24.uv_index[tm.tm_hour],
@@ -149,6 +185,146 @@ void update_screen(UserContext *user_ctx) {
                   user_ctx->w->forecast24.temperature_2m[tm.tm_hour]);
   }
 }
+void page_today(UserContext *user_ctx) {
+  ESP_LOGI(TAG, "Show Today page");
+  M5.Lcd.fillScreen(BLACK);
+  M5.Lcd.setTextSize(2.5);
+  M5.Lcd.setCursor(0, 0);
+  char time_buf[16] = {0};
+  char format[] = "%D";
+  get_time(format, time_buf, sizeof(time_buf), 0);
+  M5.Lcd.printf(
+      "Today:\n%s\n%s\n\n", time_buf,
+      OM_SDK::EnumNamesWeatherCode(user_ctx->w->forecast7.weather_code[0]));
+  if (*user_ctx->str_ip) {
+    time_t now;
+    time(&now);
+    struct tm tm;
+    localtime_r(&now, &tm);
+    user_ctx->w->update_weather(user_ctx->geo->latitude(),
+                                user_ctx->geo->longitude());
+    Forecast24 *f24 = &(user_ctx->w->forecast24);
+    if (tm.tm_hour == 24) {
+
+      M5.Lcd.printf("      24h\n"
+                    "      %s"
+                    "rain: %02.0f%%\n"
+                    "temp: %02.0fC\n"
+                    "UV:   %02.1f\n",
+                    OM_SDK::EnumNamesWeatherCode(f24->weather_code[tm.tm_hour]),
+                    f24->temperature_2m[tm.tm_hour],
+                    f24->precipitation_probability[tm.tm_hour],
+                    f24->uv_index[tm.tm_hour]);
+    } else {
+      int t1 = 8;
+      int t2 = 16;
+      if (tm.tm_hour == 23 || tm.tm_hour == 22) {
+        t1 = 23;
+        t2 = 24;
+      } else if (tm.tm_hour == 21 || tm.tm_hour == 22) {
+        t1 = 22;
+        t2 = 24;
+      } else if (tm.tm_hour == 20 || tm.tm_hour == 19) {
+        t1 = 21;
+        t2 = 23;
+      } else if (tm.tm_hour == 18 || tm.tm_hour == 17) {
+        t1 = 19;
+        t2 = 22;
+      } else if (tm.tm_hour == 16) {
+        t1 = 18;
+        t2 = 21;
+      } else if (tm.tm_hour == 15 || tm.tm_hour == 14) {
+        t1 = 17;
+        t2 = 20;
+      } else if (tm.tm_hour == 13 || tm.tm_hour == 12) {
+        t1 = 16;
+        t2 = 20;
+      } else if (tm.tm_hour == 11) {
+        t1 = 14;
+        t2 = 19;
+      } else if (tm.tm_hour == 10 || tm.tm_hour == 9) {
+        t1 = 13;
+        t2 = 18;
+      } else if (tm.tm_hour > 6) {
+        t1 = 12;
+        t2 = 19;
+      }
+
+      M5.Lcd.printf("     %dh     %dh\n"
+                    "UV:  %02.1f    %.1f\n"
+                    "rain:%02.0f%%    %02.0f%%\n"
+                    "temp:%02.0fC    %02.0fC\n",
+                    t1,
+                    t2, /*OM_SDK::EnumNamesWeatherCode(f24->weather_code[t1]),
+                OM_SDK::EnumNamesWeatherCode(f24->weather_code[t2]),*/
+                    f24->uv_index[t1], f24->uv_index[t2],
+                    f24->precipitation_probability[t1],
+                    f24->precipitation_probability[t2], f24->temperature_2m[t1],
+                    f24->temperature_2m[t2]);
+    }
+  }
+}
+
+void page_tomorrow(UserContext *user_ctx) {
+
+  ESP_LOGI(TAG, "Show Tomorrow page");
+  ForecastTmr *f_tmr = &(user_ctx->w->forecast_tmr);
+  M5.Lcd.fillScreen(BLACK);
+  M5.Lcd.setTextSize(2.5);
+  M5.Lcd.setCursor(0, 0);
+  char time_buf[16] = {0};
+  char format[] = "%a %D";
+  get_time(format, time_buf, sizeof(time_buf), 1);
+  M5.Lcd.printf("Tomorrow\n%s\n", time_buf);
+  M5.Lcd.printf("%s\n\n", OM_SDK::EnumNamesWeatherCode(
+                              user_ctx->w->forecast7.weather_code[1]));
+  M5.Lcd.printf("     9h     15h\n"
+                "UV:  %02.1f    %02.1f\n"
+                "rain:%02.0f%%    %02.0f%%\n"
+                "temp:%02.0fC    %02.0fC\n",
+                /*OM_SDK::EnumNamesWeatherCode(f24->weather_code[t1]),
+               OM_SDK::EnumNamesWeatherCode(f24->weather_code[t2]),*/
+                f_tmr->uv_index[0], f_tmr->uv_index[1],
+                f_tmr->precipitation_probability[0],
+                f_tmr->precipitation_probability[1], f_tmr->temperature_2m[0],
+                f_tmr->temperature_2m[1]);
+}
+
+void page_week(UserContext *user_ctx, int day) {
+  ESP_LOGI(TAG, "Show Day %d page", day);
+  Forecast7 *f_7 = &(user_ctx->w->forecast7);
+  M5.Lcd.fillScreen(BLACK);
+  M5.Lcd.setTextSize(2.6);
+  M5.Lcd.setCursor(0, 0);
+  char time_buf[16] = {0};
+  char format[] = "%a %D";
+  get_time(format, time_buf, sizeof(time_buf), day);
+  M5.Lcd.printf("%s\n", time_buf);
+  M5.Lcd.printf("%s\n\n", OM_SDK::EnumNamesWeatherCode(f_7->weather_code[day]));
+  char time_buf_sunset[6] = {0};
+  char time_buf_sunrise[6] = {0};
+  char format_h[] = "%H:%M";
+  struct tm timeinfo;
+  localtime_r(&(f_7->sunrise[day]), &timeinfo);
+  strftime(time_buf_sunrise, ARRAY_SIZE(time_buf_sunrise), format_h, &timeinfo);
+  localtime_r(&(f_7->sunset[day]), &timeinfo);
+  strftime(time_buf_sunset, ARRAY_SIZE(time_buf_sunset), format_h, &timeinfo);
+  M5.Lcd.printf("UV:      %02.1f \n"
+                "rain:    %02.0f%%\n"
+                "max:     %02.0fC \n"
+                "min:     %02.0fC\n"
+                "sunrise: %s\n"
+                "sunset:  %s\n",
+                f_7->uv_index_max[day], f_7->precipitation_probability_max[day],
+                f_7->temperature_2m_max[day], f_7->temperature_2m_min[day],
+                time_buf_sunrise, time_buf_sunset
+
+  );
+}
+
+void page_d2(UserContext *user_ctx) { page_week(user_ctx, 2); }
+void page_d3(UserContext *user_ctx) { page_week(user_ctx, 3); }
+void page_d4(UserContext *user_ctx) { page_week(user_ctx, 4); }
 
 void wake_up(UserContext *user_ctx) {
   check_and_update_ntp_time();
@@ -239,8 +415,16 @@ void action_task(void *pvParameter) {
         M5.Display.sleep();
         break;
       case ButtonClicked:
-        update_screen(user_ctx);
         ESP_LOGI(TAG, "Button");
+        if (*action->get_value() == 'A' && user_ctx->screen_on) {
+          change_page(-1, user_ctx);
+        }
+        if (*action->get_value() == 'B') {
+        }
+        if (*action->get_value() == 'C' && user_ctx->screen_on) {
+          change_page(1, user_ctx);
+        }
+        update_screen(user_ctx);
         update_screen_off_timer(user_ctx);
         break;
       }
@@ -351,6 +535,8 @@ extern "C" void app_main(void) {
       .pm25 = new PM25(UART_NUM_2),
       .sht3x = sht3x,
       .w = new Weather(),
+      ._page = 0,
+      .screen_on = true,
   };
   auto wakeup_cause = esp_sleep_get_wakeup_cause();
   if (wakeup_cause == ESP_SLEEP_WAKEUP_EXT1 ||
