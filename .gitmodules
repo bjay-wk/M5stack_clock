@@ -13,3 +13,6 @@
 [submodule "components/esp32-ipgeolocation-io"]
 	path = components/esp32-ipgeolocation-io
 	url = https://github.com/bjay-wk/esp32-ipgeolocation-io.git
+[submodule "components/pm25-espidf"]
+	path = components/pm25-espidf
+	url = https://github.com/bjay-wk/pm25-espidf.git
