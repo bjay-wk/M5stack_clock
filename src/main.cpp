@@ -97,8 +97,7 @@ void sleep_action(void *pvParameter) {
 
 void screen_update_cb(void *pvParameter) {
   UserContext *user_ctx = (UserContext *)pvParameter;
-  Action *new_action = (Action *)calloc(sizeof(Action), 1);
-  new_action->action = UpdateScreen;
+  Action *new_action = new Action(UpdateScreen);
   xQueueSend(user_ctx->actionQueue, (void *)&new_action, 100);
 }
 void stop_sleep_timer(UserContext *user_ctx) {
@@ -124,8 +123,7 @@ void screen_off(void *pvParameter) {
   if (esp_timer_is_active(user_ctx->timers.screen_update)) {
     esp_timer_stop(user_ctx->timers.screen_update);
   }
-  Action *new_action = (Action *)calloc(sizeof(Action), 1);
-  new_action->action = ScreenOff;
+  Action *new_action = new Action(ScreenOff);
   xQueueSend(user_ctx->actionQueue, (void *)&new_action, (TickType_t)0);
   start_or_restart_timer(user_ctx->timers.sleep, 1 * U_TO_MIN);
 }
@@ -435,7 +433,7 @@ void action_task(void *pvParameter) {
 }
 
 static esp_err_t wifi_handler(httpd_req_t *req) {
-  Action *action = (Action *)calloc(sizeof(Action), 1);
+  Action *action = new Action(ScreenOff);
   esp_err_t result = ESP_OK;
   if (strcmp(req->uri, "/") == 0) {
     httpd_resp_set_status(req, "302");
@@ -453,8 +451,7 @@ static esp_err_t wifi_handler(httpd_req_t *req) {
 void cb_connection_stopped(void *pvParameter, void *user_ctx) {
   UserContext *userContext = (UserContext *)user_ctx;
   userContext->str_ip[0] = '\0';
-  Action *new_action = (Action *)calloc(sizeof(Action), 1);
-  new_action->action = WifiDisconnected;
+  Action *new_action = new Action(WifiDisconnected);
   xQueueSend(userContext->actionQueue, (void *)&new_action, (TickType_t)100);
 }
 
@@ -463,15 +460,13 @@ void cb_connection_ok(void *pvParameter, void *user_ctx) {
   UserContext *userContext = (UserContext *)user_ctx;
   esp_ip4addr_ntoa(&param->ip_info.ip, userContext->str_ip, IP4ADDR_STRLEN_MAX);
   ESP_LOGI(TAG, "IP: %s", userContext->str_ip);
-  Action *new_action = (Action *)calloc(sizeof(Action), 1);
-  new_action->action = WifiConnected;
+  Action *new_action = new Action(WifiConnected);
   xQueueSend(userContext->actionQueue, (void *)&new_action, 100);
 }
 
 void cb_connection_AP_started(void *pvParameter, void *user_ctx) {
   UserContext *userContext = (UserContext *)user_ctx;
-  Action *new_action = (Action *)calloc(sizeof(Action), 1);
-  new_action->action = ApStarted;
+  Action *new_action = new Action(ApStarted);
   xQueueSend(userContext->actionQueue, (void *)&new_action, 100);
 }
 
@@ -572,21 +567,15 @@ extern "C" void app_main(void) {
   while (1) {
     M5.update();
     if (M5.BtnA.wasClicked()) {
-      Action *new_action = (Action *)calloc(sizeof(Action), 1);
-      new_action->action = ButtonClicked;
-      new_action->set_value("A");
+      Action *new_action = new Action(ButtonClicked, "A");
       xQueueSend(userContext.actionQueue, (void *)&new_action, 100);
     }
     if (M5.BtnB.wasClicked()) {
-      Action *new_action = (Action *)calloc(sizeof(Action), 1);
-      new_action->action = ButtonClicked;
-      new_action->set_value("B");
+      Action *new_action = new Action(ButtonClicked, "B");
       xQueueSend(userContext.actionQueue, (void *)&new_action, 100);
     }
     if (M5.BtnC.wasClicked()) {
-      Action *new_action = (Action *)calloc(sizeof(Action), 1);
-      new_action->action = ButtonClicked;
-      new_action->set_value("C");
+      Action *new_action = new Action(ButtonClicked, "C");
       xQueueSend(userContext.actionQueue, (void *)&new_action, 100);
     }
 

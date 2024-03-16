@@ -13,18 +13,20 @@ typedef enum ActionEnum {
 } ActionEnum;
 
 class Action {
-  char *_value = nullptr;
 
 public:
-  ActionEnum action = ActionEnum::ScreenOff;
-  char *get_value() { return _value; }
-  void set_value(const char *value) {
-    if (_value != nullptr)
-      free(_value);
-    _value = strdup(value);
+  Action(ActionEnum action) : _action(action) {}
+  Action(ActionEnum action, const char *value) : _action(action) {
+    if (value)
+      _value = strdup(value);
   }
+
+  ActionEnum action() { return _action; }
+
+  char *value() { return _value; }
+
   bool is_configuration() {
-    switch (action) {
+    switch (_action) {
     case WifiConnected:
     case ApStarted:
       return true;
@@ -32,10 +34,15 @@ public:
       return false;
     }
   }
+
   ~Action() {
     if (_value != nullptr)
       free(_value);
   }
+
+private:
+  char *_value = nullptr;
+  const ActionEnum _action;
 };
 
 class HttpManagerBase {
