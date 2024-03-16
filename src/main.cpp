@@ -26,8 +26,10 @@
 
 #define U_TO_SEC 1000000
 #define U_TO_MIN U_TO_SEC * 60
-const char TAG[] = "main";
 #define ARRAY_SIZE(array) (sizeof(array) / sizeof((array)[0]))
+
+const char TAG[] = "main";
+
 typedef struct Timers {
   esp_timer_handle_t screen_off;
   esp_timer_handle_t sleep;
@@ -57,6 +59,7 @@ void page_tomorrow(UserContext *user_ctx);
 void page_d2(UserContext *user_ctx);
 void page_d3(UserContext *user_ctx);
 void page_d4(UserContext *user_ctx);
+bool bh1750_get(bh1750_handle_t bh1750, float *output);
 
 ScreenUpdateFunc screen_update_func[] = {
     page_main, page_today, page_tomorrow, page_d2, page_d3, page_d4,
@@ -72,23 +75,8 @@ void change_page(int page, UserContext *user_ctx) {
   }
 }
 
-bool bh1750_get(bh1750_handle_t bh1750, float *output);
-
 void sleep_action(void *pvParameter) {
   ESP_LOGI(TAG, "Entering sleep mode");
-
-  /*
-  const uint64_t m1 = 1ULL << GPIO_NUM_37;
-  const uint64_t m2 = 1ULL << GPIO_NUM_38;
-  const uint64_t m3 = 1ULL << GPIO_NUM_39;
-  esp_sleep_enable_ext1_wakeup(m1 | m2, ESP_EXT1_WAKEUP_ANY_HIGH);
-  ESP_ERROR_CHECK(gpio_pulldown_dis(GPIO_NUM_37));
-  ESP_ERROR_CHECK(gpio_pullup_en(GPIO_NUM_37));
-  ESP_ERROR_CHECK(gpio_pulldown_dis(GPIO_NUM_38));
-  ESP_ERROR_CHECK(gpio_pullup_en(GPIO_NUM_38));
-  ESP_ERROR_CHECK(gpio_pulldown_dis(GPIO_NUM_39));
-  ESP_ERROR_CHECK(gpio_pullup_en(GPIO_NUM_39));
-  */
   gpio_pullup_en(GPIO_NUM_38);
   gpio_pulldown_dis(GPIO_NUM_38);
   esp_sleep_enable_ext0_wakeup(GPIO_NUM_38, false);
@@ -96,7 +84,7 @@ void sleep_action(void *pvParameter) {
 }
 
 void screen_update_cb(void *pvParameter) {
-  UserContext *user_ctx = (UserContext *)pvParameter;
+  UserContext *user_ctx = static_cast<UserContext *>(pvParameter);
   Action *new_action = new Action(UpdateScreen);
   xQueueSend(user_ctx->actionQueue, (void *)&new_action, 100);
 }
@@ -118,7 +106,7 @@ void update_screen_off_timer(UserContext *user_ctx) {
 
 void screen_off(void *pvParameter) {
   ESP_LOGI(TAG, "Screen off");
-  UserContext *user_ctx = (UserContext *)pvParameter;
+  UserContext *user_ctx = static_cast<UserContext *>(pvParameter);
   user_ctx->screen_on = false;
   if (esp_timer_is_active(user_ctx->timers.screen_update)) {
     esp_timer_stop(user_ctx->timers.screen_update);
@@ -183,6 +171,7 @@ void page_main(UserContext *user_ctx) {
                   user_ctx->w->forecast24.temperature_2m[tm.tm_hour]);
   }
 }
+
 void page_today(UserContext *user_ctx) {
   ESP_LOGI(TAG, "Show Today page");
   M5.Lcd.fillScreen(BLACK);
@@ -264,7 +253,6 @@ void page_today(UserContext *user_ctx) {
 }
 
 void page_tomorrow(UserContext *user_ctx) {
-
   ESP_LOGI(TAG, "Show Tomorrow page");
   ForecastTmr *f_tmr = &(user_ctx->w->forecast_tmr);
   M5.Lcd.fillScreen(BLACK);
@@ -359,19 +347,19 @@ void init_timers(UserContext *user_ctx) {
 }
 
 void action_task(void *pvParameter) {
-  UserContext *user_ctx = (UserContext *)pvParameter;
+  UserContext *user_ctx = static_cast<UserContext *>(pvParameter);
   bool connected = false;
   Action *action = nullptr;
   init_timers(user_ctx);
   while (1) {
     if (xQueueReceive(user_ctx->actionQueue, &action, (TickType_t)1000)) {
-      if (!connected && action->action != WifiConnected &&
-          action->action != ApStarted) {
+      if (!connected && action->action() != WifiConnected &&
+          action->action() != ApStarted) {
         free(action);
         action = nullptr;
         continue;
       }
-      switch (action->action) {
+      switch (action->action()) {
       case UpdateScreen: {
         update_screen(user_ctx);
         break;
@@ -414,12 +402,10 @@ void action_task(void *pvParameter) {
         break;
       case ButtonClicked:
         ESP_LOGI(TAG, "Button");
-        if (*action->get_value() == 'A' && user_ctx->screen_on) {
+        if (*action->value() == 'A' && user_ctx->screen_on) {
           change_page(-1, user_ctx);
-        }
-        if (*action->get_value() == 'B') {
-        }
-        if (*action->get_value() == 'C' && user_ctx->screen_on) {
+        } else if (*action->value() == 'B') {
+        } else if (*action->value() == 'C' && user_ctx->screen_on) {
           change_page(1, user_ctx);
         }
         update_screen(user_ctx);
@@ -443,21 +429,21 @@ static esp_err_t wifi_handler(httpd_req_t *req) {
     ESP_LOGI(TAG, "%s", req->uri);
     httpd_resp_send_404(req);
   }
-  UserContext *userContext = (UserContext *)req->user_ctx;
+  UserContext *userContext = static_cast<UserContext *>(req->user_ctx);
   xQueueSend(userContext->actionQueue, (void *)&action, (TickType_t)0);
   return result;
 }
 
 void cb_connection_stopped(void *pvParameter, void *user_ctx) {
-  UserContext *userContext = (UserContext *)user_ctx;
+  UserContext *userContext = static_cast<UserContext *>(user_ctx);
   userContext->str_ip[0] = '\0';
   Action *new_action = new Action(WifiDisconnected);
   xQueueSend(userContext->actionQueue, (void *)&new_action, (TickType_t)100);
 }
 
 void cb_connection_ok(void *pvParameter, void *user_ctx) {
-  ip_event_got_ip_t *param = (ip_event_got_ip_t *)pvParameter;
-  UserContext *userContext = (UserContext *)user_ctx;
+  ip_event_got_ip_t *param = static_cast<ip_event_got_ip_t *>(pvParameter);
+  UserContext *userContext = static_cast<UserContext *>(user_ctx);
   esp_ip4addr_ntoa(&param->ip_info.ip, userContext->str_ip, IP4ADDR_STRLEN_MAX);
   ESP_LOGI(TAG, "IP: %s", userContext->str_ip);
   Action *new_action = new Action(WifiConnected);
@@ -465,7 +451,7 @@ void cb_connection_ok(void *pvParameter, void *user_ctx) {
 }
 
 void cb_connection_AP_started(void *pvParameter, void *user_ctx) {
-  UserContext *userContext = (UserContext *)user_ctx;
+  UserContext *userContext = static_cast<UserContext *>(user_ctx);
   Action *new_action = new Action(ApStarted);
   xQueueSend(userContext->actionQueue, (void *)&new_action, 100);
 }
@@ -501,7 +487,6 @@ bool bh1750_get(bh1750_handle_t bh1750, float *output) {
 }
 
 extern "C" void app_main(void) {
-  flatbuffers::FlatBufferBuilder builder;
   i2c_bus_handle_t i2c_bus = nullptr;
   bh1750_handle_t bh1750 = nullptr;
   sht3x_handle_t sht3x = nullptr;
@@ -517,7 +502,6 @@ extern "C" void app_main(void) {
     err = nvs_flash_init();
   }
   M5.begin();
-  M5.Power.begin();
   M5.Lcd.setBrightness(50);
   M5.Lcd.setTextSize(1.5);
   Geolocation geo;
