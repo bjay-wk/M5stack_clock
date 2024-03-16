@@ -10,3 +10,6 @@
 [submodule "lib/esp32-open-meteo"]
 	path = lib/esp32-open-meteo
 	url = https://github.com/bjay-wk/esp32-open-meteo.git
+[submodule "components/esp32-ipgeolocation-io"]
+	path = components/esp32-ipgeolocation-io
+	url = https://github.com/bjay-wk/esp32-ipgeolocation-io.git
