@@ -7,6 +7,3 @@
 [submodule "extra_components/posix_tz_db"]
 	path = extra_components/posix_tz_db
 	url = https://github.com/nayarsystems/posix_tz_db
-[submodule "lib/esp32-open-meteo"]
-	path = lib/esp32-open-meteo
-	url = https://github.com/bjay-wk/esp32-open-meteo.git
