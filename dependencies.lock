@@ -6,6 +6,13 @@ dependencies:
       path: .
       type: git
     version: e80b4e62449cfe5dc57c956c863653bdd6a8e127
+  esp32-wifi-manager:
+    component_hash: e816580207a1bd939e3a3aea32d2cadbe089c532d0d963b64176ca6ca3c3b98b
+    source:
+      git: https://github.com/bjay-wk/esp32-wifi-manager
+      path: .
+      type: git
+    version: b1e591ac3603da29143e4b27f6218ab008b05af9
   espressif/mdns:
     component_hash: d96d277207c4fec77ec290b7a8b0ca4043e10f407df0ff6aa52e54a94f0c54a5
     source:
@@ -17,6 +24,6 @@ dependencies:
     source:
       type: idf
     version: 5.1.2
-manifest_hash: 8b562f5aba33fd18aba4fff405101097dffa71d12740cdc3396f5daea7729947
+manifest_hash: c57b3450b04c2303aaab500507c4105e9ad69f2ba55f7b560a51a9887c0316fd
 target: esp32
 version: 1.0.0
