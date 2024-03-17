@@ -1,4 +1,11 @@
 dependencies:
+  esp32-ipgeolocation-io:
+    component_hash: ef220585e3d5212c32e3b5c17eb1495c5d46dd15475dde1b4951d2e78a176f9d
+    source:
+      git: https://github.com/bjay-wk/esp32-ipgeolocation-io
+      path: .
+      type: git
+    version: e80b4e62449cfe5dc57c956c863653bdd6a8e127
   espressif/mdns:
     component_hash: d96d277207c4fec77ec290b7a8b0ca4043e10f407df0ff6aa52e54a94f0c54a5
     source:
@@ -10,13 +17,6 @@ dependencies:
     source:
       type: idf
     version: 5.1.2
-  pm25-espidf:
-    component_hash: b619426194884430477a56cda21efce9c0bce48d9b8f0daffdd9ab0af9fd6430
-    source:
-      git: https://github.com/bjay-wk/pm25-espidf
-      path: .
-      type: git
-    version: 98b7def873e0c1cbaff4a5e48a0e62e616032c17
-manifest_hash: 577695421d5557271913e20b4c67838188e44cd899257e4beb10235756a17708
+manifest_hash: 8b562f5aba33fd18aba4fff405101097dffa71d12740cdc3396f5daea7729947
 target: esp32
 version: 1.0.0
