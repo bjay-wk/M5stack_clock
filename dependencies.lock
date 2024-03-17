@@ -10,6 +10,13 @@ dependencies:
     source:
       type: idf
     version: 5.1.2
-manifest_hash: a75f5d778605f362f5e4549bcd189026c23580cc7b55ac3b1eecb75dc49b5446
+  pm25-espidf:
+    component_hash: b619426194884430477a56cda21efce9c0bce48d9b8f0daffdd9ab0af9fd6430
+    source:
+      git: https://github.com/bjay-wk/pm25-espidf
+      path: .
+      type: git
+    version: 98b7def873e0c1cbaff4a5e48a0e62e616032c17
+manifest_hash: 577695421d5557271913e20b4c67838188e44cd899257e4beb10235756a17708
 target: esp32
 version: 1.0.0

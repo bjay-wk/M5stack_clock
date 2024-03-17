@@ -1,2 +1,6 @@
 dependencies:
-  espressif/mdns: ">=1.2.0"
+  espressif/mdns: "==1.2.4"
+  #pm25-espidf:
+  #  git: https://github.com/bjay-wk/pm25-espidf
+  esp32-ipgeolocation-io:
+    git: https://github.com/bjay-wk/esp32-ipgeolocation-io
