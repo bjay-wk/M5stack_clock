@@ -90,7 +90,7 @@ void Weather::copy_daily(const openmeteo_sdk::WeatherApiResponse *output) {
       }
     } else if (data->variable() == openmeteo_sdk::Variable_sunset) {
       for (int i = 0; i < data->values_int64()->size(); ++i) {
-        forecast7.sunrise[i] = data->values_int64()->Get(i);
+        forecast7.sunset[i] = data->values_int64()->Get(i);
       }
     } else {
       ESP_LOGE(TAG, "Not Treated daily %s",

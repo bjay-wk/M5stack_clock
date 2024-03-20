@@ -141,7 +141,7 @@ void page_main(UserContext *user_ctx) {
   char format[] = "%a %D\n%H:%M";
   get_time(format, time_buf, sizeof(time_buf), 0);
   ESP_LOGI(TAG, "%s", time_buf);
-  M5.Lcd.printf("%s\n", time_buf);
+  M5.Lcd.printf("%s\n\n", time_buf);
   PMSAQIdata data;
   M5.Lcd.setTextSize(2);
   if (user_ctx->pm25->get(&data)) {
@@ -191,26 +191,35 @@ void page_today(UserContext *user_ctx) {
     user_ctx->w->update_weather(user_ctx->geo->latitude(),
                                 user_ctx->geo->longitude());
     Forecast24 *f24 = &(user_ctx->w->forecast24);
-    if (tm.tm_hour == 24) {
+    char time_buf_sunset[6] = {0};
+    char time_buf_sunrise[6] = {0};
+    char format_h[] = "%H:%M";
+    struct tm timeinfo;
+    localtime_r(&(user_ctx->w->forecast7.sunrise[0]), &timeinfo);
+    strftime(time_buf_sunrise, ARRAY_SIZE(time_buf_sunrise), format_h,
+             &timeinfo);
+    localtime_r(&(user_ctx->w->forecast7.sunset[0]), &timeinfo);
+    strftime(time_buf_sunset, ARRAY_SIZE(time_buf_sunset), format_h, &timeinfo);
+    if (tm.tm_hour == 23) {
 
-      M5.Lcd.printf("      24h\n"
+      M5.Lcd.printf("      23h\n"
                     "      %s"
                     "rain: %02.0f%%\n"
                     "temp: %02.0fC\n"
-                    "UV:   %02.1f\n",
+                    "UV:   %02.1f\n\n"
+                    "sunrise: %s\n"
+                    "sunset:  %s\n",
                     OM_SDK::EnumNamesWeatherCode(f24->weather_code[tm.tm_hour]),
                     f24->temperature_2m[tm.tm_hour],
                     f24->precipitation_probability[tm.tm_hour],
-                    f24->uv_index[tm.tm_hour]);
+                    f24->uv_index[tm.tm_hour], time_buf_sunrise,
+                    time_buf_sunset);
     } else {
       int t1 = 8;
       int t2 = 16;
-      if (tm.tm_hour == 23 || tm.tm_hour == 22) {
-        t1 = 23;
-        t2 = 24;
-      } else if (tm.tm_hour == 21 || tm.tm_hour == 22) {
+      if (tm.tm_hour == 21 || tm.tm_hour == 22) {
         t1 = 22;
-        t2 = 24;
+        t2 = 23;
       } else if (tm.tm_hour == 20 || tm.tm_hour == 19) {
         t1 = 21;
         t2 = 23;
@@ -240,14 +249,16 @@ void page_today(UserContext *user_ctx) {
       M5.Lcd.printf("     %dh     %dh\n"
                     "UV:  %02.1f    %.1f\n"
                     "rain:%02.0f%%    %02.0f%%\n"
-                    "temp:%02.0fC    %02.0fC\n",
+                    "temp:%02.0fC    %02.0fC\n\n"
+                    "sunrise: %s\n"
+                    "sunset:  %s\n",
                     t1,
                     t2, /*OM_SDK::EnumNamesWeatherCode(f24->weather_code[t1]),
                 OM_SDK::EnumNamesWeatherCode(f24->weather_code[t2]),*/
                     f24->uv_index[t1], f24->uv_index[t2],
                     f24->precipitation_probability[t1],
                     f24->precipitation_probability[t2], f24->temperature_2m[t1],
-                    f24->temperature_2m[t2]);
+                    f24->temperature_2m[t2], time_buf_sunrise, time_buf_sunset);
     }
   }
 }
@@ -260,6 +271,14 @@ void page_tomorrow(UserContext *user_ctx) {
   M5.Lcd.setCursor(0, 0);
   char time_buf[16] = {0};
   char format[] = "%a %D";
+  char time_buf_sunset[6] = {0};
+  char time_buf_sunrise[6] = {0};
+  char format_h[] = "%H:%M";
+  struct tm timeinfo;
+  localtime_r(&(user_ctx->w->forecast7.sunrise[1]), &timeinfo);
+  strftime(time_buf_sunrise, ARRAY_SIZE(time_buf_sunrise), format_h, &timeinfo);
+  localtime_r(&(user_ctx->w->forecast7.sunset[1]), &timeinfo);
+  strftime(time_buf_sunset, ARRAY_SIZE(time_buf_sunset), format_h, &timeinfo);
   get_time(format, time_buf, sizeof(time_buf), 1);
   M5.Lcd.printf("Tomorrow\n%s\n", time_buf);
   M5.Lcd.printf("%s\n\n", OM_SDK::EnumNamesWeatherCode(
@@ -267,13 +286,15 @@ void page_tomorrow(UserContext *user_ctx) {
   M5.Lcd.printf("     9h     15h\n"
                 "UV:  %02.1f    %02.1f\n"
                 "rain:%02.0f%%    %02.0f%%\n"
-                "temp:%02.0fC    %02.0fC\n",
+                "temp:%02.0fC    %02.0fC\n\n"
+                "sunrise: %s\n"
+                "sunset:  %s\n",
                 /*OM_SDK::EnumNamesWeatherCode(f24->weather_code[t1]),
                OM_SDK::EnumNamesWeatherCode(f24->weather_code[t2]),*/
                 f_tmr->uv_index[0], f_tmr->uv_index[1],
                 f_tmr->precipitation_probability[0],
                 f_tmr->precipitation_probability[1], f_tmr->temperature_2m[0],
-                f_tmr->temperature_2m[1]);
+                f_tmr->temperature_2m[1], time_buf_sunrise, time_buf_sunset);
 }
 
 void page_week(UserContext *user_ctx, int day) {
@@ -298,7 +319,7 @@ void page_week(UserContext *user_ctx, int day) {
   M5.Lcd.printf("UV:      %02.1f \n"
                 "rain:    %02.0f%%\n"
                 "max:     %02.0fC \n"
-                "min:     %02.0fC\n"
+                "min:     %02.0fC\n\n"
                 "sunrise: %s\n"
                 "sunset:  %s\n",
                 f_7->uv_index_max[day], f_7->precipitation_probability_max[day],
