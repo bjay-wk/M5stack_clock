@@ -426,6 +426,7 @@ void action_task(void *pvParameter) {
         if (*action->value() == 'A' && user_ctx->screen_on) {
           change_page(-1, user_ctx);
         } else if (*action->value() == 'B') {
+          user_ctx->_page = 0;
         } else if (*action->value() == 'C' && user_ctx->screen_on) {
           change_page(1, user_ctx);
         }
