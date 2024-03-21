@@ -1,11 +1,13 @@
 menu "CLOCK Configuration"
 
-config CONFIG_CLOCK_BRIGHTNESS_AUTO
+config CLOCK_BRIGHTNESS_AUTO
     bool "Automatic Brightness ajustment with an Ambient Light Sensor"
     default y
 
-config CONFIG_CLOCK_BRIGHTNESS_DEFAULT_VALUE
+config CLOCK_BRIGHTNESS_DEFAULT_VALUE
 	int "default brightness value [1-255]"
 	default 100
 	help
     [1-255]
+
+endmenu

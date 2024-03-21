@@ -120,6 +120,7 @@ void update_screen(UserContext *user_ctx) {
   stop_sleep_timer(user_ctx);
   user_ctx->screen_on = true;
   M5.Lcd.wakeup();
+#if CONFIG_CLOCK_BRIGHTNESS_AUTO
   float lux = 0;
   bh1750_get(user_ctx->light_sensor, &lux);
   if (lux > 5000)
@@ -128,6 +129,7 @@ void update_screen(UserContext *user_ctx) {
   if (lux < 1)
     lux = 1;
   M5.Lcd.setBrightness(lux);
+#endif
   screen_update_func[user_ctx->_page](user_ctx);
 }
 
@@ -512,7 +514,9 @@ extern "C" void app_main(void) {
   i2c_bus_handle_t i2c_bus = nullptr;
   bh1750_handle_t bh1750 = nullptr;
   sht3x_handle_t sht3x = nullptr;
+#if CONFIG_CLOCK_BRIGHTNESS_AUTO
   i2c_init(&i2c_bus, &bh1750, &sht3x);
+#endif
 
   esp_err_t err = nvs_flash_init();
 
@@ -524,7 +528,7 @@ extern "C" void app_main(void) {
     err = nvs_flash_init();
   }
   M5.begin();
-  M5.Lcd.setBrightness(50);
+  M5.Lcd.setBrightness(CONFIG_CLOCK_BRIGHTNESS_DEFAULT_VALUE);
   M5.Lcd.setTextSize(1.5);
   Geolocation geo;
   UserContext userContext = {
